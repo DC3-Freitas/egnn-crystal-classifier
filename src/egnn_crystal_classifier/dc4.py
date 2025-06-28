@@ -20,7 +20,21 @@ class DC4:
         hparams: HParams = HParams()
     ) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = model
+        if model is None:
+            # Load pretrained model
+            model = EGNN(
+                num_buckets=hparams.num_buckets,
+                num_features=hparams.num_features,
+                num_classes=len(label_map),
+                hidden_dim=hparams.hidden_dim,
+                num_layers=hparams.num_layers,
+            )
+            model.load_state_dict("egnn_crystal_classifier/ml_model/model_best.pth")
+            print("No model provided. I will use my pretrained model.")
+        else:
+            assert isinstance(model, EGNN), "Model must be an EGNN instance."
+            self.model = model
+
         self.model.to(self.device)
         self.model.eval()
         self.hparams = hparams
@@ -93,12 +107,3 @@ class DC4:
         pos_graphs = torch.tensor(pos_graphs, dtype=torch.float32, device=self.device)
 
         return pos_graphs
-    
-        # graph = construct_batched_graph(
-        #     data,
-        #     None,
-        #     self.hparams.num_buckets,
-        #     self.device,
-        # )
-
-        # return graph
