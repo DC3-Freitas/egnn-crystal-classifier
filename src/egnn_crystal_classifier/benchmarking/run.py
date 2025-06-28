@@ -33,6 +33,7 @@ EXP_TO_CLASSIFIERS = {
     ],
     "ge_cd": ["DC4", "DC3", "Common Neighbor Analysis (Diamond)", "Chill+"],
 }
+
 dc4_model = DC4()
 dc3_model = create_dc3_model(None)
 
@@ -132,13 +133,23 @@ def main() -> None:
         help="Experiment name to run the benchmark for.",
     )
     args = parser.parse_args()
+
+    # Detect if md simulation data exists
+    md_data_path = "egnn_crystal_classifier/benchmarking/md"
+    if not os.path.exists(md_data_path):
+        print(
+            "I can't find the MD simulation data directory. Please make sure it's",
+            "present in the expected location: 'egnn_crystal_classifier/benchmarking/md'."
+        )
+
+    # If an experiment is specified, run only that one
     if args.exp:
         print(f"== Running benchmark for {args.exp}...")
         run_benchmark(args.exp)
         return
 
+    # Otherwise, run benchmarks for all experiments
     experiments = ["al_fcc", "li_bcc", "ti_hcp", "ge_cd"]
-
     for exp_name in experiments:
         print(f"== Running benchmark for {exp_name}...")
         run_benchmark(exp_name)

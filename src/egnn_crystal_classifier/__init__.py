@@ -8,6 +8,7 @@ from ovito.data import DataCollection
 from ovito.pipeline import ModifierInterface
 from traits.api import Any, Bool
 
+
 class DC4Modifier(ModifierInterface):
     """
     OVITO modifier for crystal structure classification using the DC4 equivariant
@@ -23,9 +24,9 @@ class DC4Modifier(ModifierInterface):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        assert isinstance(self.model, (str, type(None))), (
-            "Model must be a string path to the model or None for default model."
-        )
+        assert isinstance(
+            self.model, (str, type(None))
+        ), "Model must be a string path to the model or None for default model."
         if isinstance(self.model, str):
             self.model = DC4(
                 model_path=self.model,
@@ -34,7 +35,7 @@ class DC4Modifier(ModifierInterface):
             )
         else:
             self.model = DC4()
-    
+
     def modify(self, data: DataCollection, frame: int, **kwargs) -> None:
         """
         Modify the DataCollection in-place by predicting crystal structure types

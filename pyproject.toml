@@ -39,3 +39,15 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "scipy.spatial.*"
 ignore_missing_imports = true
+
+[project.urls]
+repository = "https://github.com/DC3-Freitas/egnn-crystal-classifier"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.*"]
+
+[project.entry-points.'OVITO.Modifier']
+"DC4 Classification" = "egnn_crystal_classifier:DC4Modifier"

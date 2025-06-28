@@ -13,9 +13,10 @@ from ovito.io import import_file
 from scipy.spatial import cKDTree
 
 NN_COUNT = 16
-
 SYNTH_DATA_PATH = "synthetic_data"
-
+CHECKERBOARD_CELL_SIZE_XZ = 4
+CHECKERBOARD_CELL_SIZE_Y = 3
+CHECKERBOARD_CELL_COUNT = 3
 
 def gen():
     # Extract data
@@ -37,10 +38,6 @@ def gen():
             structure_cnts[structure] = structure_cnts.get(structure, 0) + len(
                 all_positions
             )
-
-    CHECKERBOARD_CELL_SIZE_XZ = 4
-    CHECKERBOARD_CELL_SIZE_Y = 3
-    CHECKERBOARD_CELL_COUNT = 3
 
     def extract_center(fname):
         """
@@ -73,9 +70,6 @@ def gen():
 
     available_temps = os.listdir(os.path.join(SYNTH_DATA_PATH, "bcc"))
     structure_names = list(structure_cnts.keys())
-
-    # x_data_checker = []
-    # y_data_checker = []
 
     for temp in available_temps:
         for i in range(len(structure_names)):
@@ -122,18 +116,6 @@ def gen():
                                 labels += [struct_b] * len(center_b)
                             parity_ctr = 1 - parity_ctr
 
-                # generate visualization in matplotlib
-                # fig = plt.figure()
-                # ax = fig.add_subplot(111, projection='3d')
-                # ax.scatter(
-                #     checkerboard_positions[:, 0],
-                #     checkerboard_positions[:, 1],
-                #     checkerboard_positions[:, 2],
-                #     c=[(structure_names.index(k) / len(structure_names)) for k in labels],
-                #     cmap='viridis',
-                # )
-                # plt.show()
-
                 x_data.append(checkerboard_positions)
                 y_data.append(labels)
 
@@ -142,7 +124,6 @@ def gen():
     y_data_new = []
 
     for all_positions, all_labels in zip(x_data, y_data):
-
         # Add one to include self
         tree = cKDTree(all_positions)
         neighbors = tree.query(all_positions, k=NN_COUNT + 1)[1][:]
