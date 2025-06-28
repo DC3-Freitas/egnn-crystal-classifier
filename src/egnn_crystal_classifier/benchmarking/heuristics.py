@@ -7,35 +7,28 @@ import numpy as np
 CORRECT_MAP_ICNA = {
     "al_fcc": CommonNeighborAnalysisModifier.Type.FCC,
     "li_bcc": CommonNeighborAnalysisModifier.Type.BCC,
-    "ti_hcp": CommonNeighborAnalysisModifier.Type.HCP
+    "ti_hcp": CommonNeighborAnalysisModifier.Type.HCP,
 }
 CORRECT_MAP_CNA_NONDIAMOND = {
     "al_fcc": CommonNeighborAnalysisModifier.Type.FCC,
     "li_bcc": CommonNeighborAnalysisModifier.Type.BCC,
-    "ti_hcp": CommonNeighborAnalysisModifier.Type.HCP
+    "ti_hcp": CommonNeighborAnalysisModifier.Type.HCP,
 }
-CORRECT_MAP_CNA_DIAMOND = {
-    "ge_cd": IdentifyDiamondModifier.Type.CUBIC_DIAMOND
-}
+CORRECT_MAP_CNA_DIAMOND = {"ge_cd": IdentifyDiamondModifier.Type.CUBIC_DIAMOND}
 CORRECT_MAP_ACKLAND_JONES = {
     "al_fcc": AcklandJonesModifier.Type.FCC,
     "li_bcc": AcklandJonesModifier.Type.BCC,
-    "ti_hcp": AcklandJonesModifier.Type.HCP
+    "ti_hcp": AcklandJonesModifier.Type.HCP,
 }
-CORRECT_MAP_VOROTOP = {
-    "li_bcc": 2
-}
-CORRECT_MAP_CHILLPLUS = {
-    "ge_cd": ChillPlusModifier.Type.CUBIC_ICE
-}
+CORRECT_MAP_VOROTOP = {"li_bcc": 2}
+CORRECT_MAP_CHILLPLUS = {"ge_cd": ChillPlusModifier.Type.CUBIC_ICE}
 
 # CONSTANTS (OTHER)
 
-CHILLPLUS_CUTOFF = {
-    "ge_cd": 2.9
-}
+CHILLPLUS_CUTOFF = {"ge_cd": 2.9}
 
 # HEURISTICS
+
 
 def apply_heuristic(data_path, heuristic):
     pipeline = import_file(data_path)
@@ -50,7 +43,7 @@ def apply_heuristic(data_path, heuristic):
         structures = particle_info["Structure Type"].__array__()
         all_data.append(structures)
 
-    return np.concatenate(all_data) 
+    return np.concatenate(all_data)
 
 
 def compute_cna_nondiamond(data_path):
@@ -61,15 +54,25 @@ def compute_cna_nondiamond(data_path):
 
 def compute_cna_diamond(data_path):
     cna = IdentifyDiamondModifier()
-    cna.structures[IdentifyDiamondModifier.Type.CUBIC_DIAMOND_FIRST_NEIGHBOR].enabled = False
-    cna.structures[IdentifyDiamondModifier.Type.CUBIC_DIAMOND_SECOND_NEIGHBOR].enabled = False
-    cna.structures[IdentifyDiamondModifier.Type.HEX_DIAMOND_FIRST_NEIGHBOR].enabled = False
-    cna.structures[IdentifyDiamondModifier.Type.HEX_DIAMOND_SECOND_NEIGHBOR].enabled = False
+    cna.structures[
+        IdentifyDiamondModifier.Type.CUBIC_DIAMOND_FIRST_NEIGHBOR
+    ].enabled = False
+    cna.structures[
+        IdentifyDiamondModifier.Type.CUBIC_DIAMOND_SECOND_NEIGHBOR
+    ].enabled = False
+    cna.structures[IdentifyDiamondModifier.Type.HEX_DIAMOND_FIRST_NEIGHBOR].enabled = (
+        False
+    )
+    cna.structures[IdentifyDiamondModifier.Type.HEX_DIAMOND_SECOND_NEIGHBOR].enabled = (
+        False
+    )
     return apply_heuristic(data_path, cna)
 
 
 def compute_icna(data_path):
-    icna = CommonNeighborAnalysisModifier(mode=CommonNeighborAnalysisModifier.Mode.IntervalCutoff)
+    icna = CommonNeighborAnalysisModifier(
+        mode=CommonNeighborAnalysisModifier.Mode.IntervalCutoff
+    )
     icna.structures[CommonNeighborAnalysisModifier.Type.ICO].enabled = False
     return apply_heuristic(data_path, icna)
 
@@ -96,25 +99,25 @@ def compute_heuristic_accuracy(exp_name, data_path, heuristic):
     if heuristic == "Common Neighbor Analysis (Non-Diamond)":
         preds = compute_cna_nondiamond(data_path)
         return (preds == CORRECT_MAP_CNA_NONDIAMOND[exp_name]).sum().item() / len(preds)
-    
+
     elif heuristic == "Common Neighbor Analysis (Diamond)":
         preds = compute_cna_diamond(data_path)
         return (preds == CORRECT_MAP_CNA_DIAMOND[exp_name]).sum().item() / len(preds)
-    
+
     elif heuristic == "Interval Common Neighbor Analysis":
         preds = compute_icna(data_path)
         return (preds == CORRECT_MAP_ICNA[exp_name]).sum().item() / len(preds)
-    
+
     elif heuristic == "Ackland-Jones Analysis":
         preds = compute_ackland_jones(data_path)
         return (preds == CORRECT_MAP_ACKLAND_JONES[exp_name]).sum().item() / len(preds)
-    
+
     elif heuristic == "VoroTop Analysis":
         preds = compute_vorotop(data_path)
         return (preds == CORRECT_MAP_VOROTOP[exp_name]).sum().item() / len(preds)
-    
+
     elif heuristic == "Chill+":
         preds = compute_chillplus(data_path, exp_name)
         return (preds == CORRECT_MAP_CHILLPLUS[exp_name]).sum().item() / len(preds)
-    
+
     raise ValueError("Invalid heuristic name")
