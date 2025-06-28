@@ -1,5 +1,5 @@
 """
-Okay, I am assuming data gen might be subject to change so it is very hacked together right now 
+Okay, I am assuming data gen might be subject to change so it is very hacked together right now
 and triggers tons of mypy errors. However, I think that having it follow some gen() which returns
 x_data, y_data, map or smth is the play here.
 
