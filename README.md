@@ -1,9 +1,9 @@
 # e3gnn-crystal-classifier
 ![image](https://github.com/user-attachments/assets/890dc8bb-6e30-4a09-a014-171f26ee5136)
-E(3)-equivariant graph convolutional network for crystal structure prediction.
+E(3)-equivariant graph neural network for crystal structure prediction.
 
 ## Usage
-If installed in OVITO, `DC4 Classification` will appear in the Python subsection of the Modifiers panel. The module can also be used directly in Python:
+If installed in OVITO, `DC4 Classification` will appear in the Python subsection of the Modifiers panel. The module can also be used directly in a standard Python environment:
 ```python
 from ovito.io import import_file
 from egnn_crystal_classifier.dc4 import DC4
@@ -21,6 +21,22 @@ modifier.model_input = None      # Use default pretrained model
 
 pipeline = import_file("path/to/simulation/file")
 pipeline.modifiers.append(dc4_modifier)
+```
+The model can be trained with `python -m egnn_crystal_classifier.scripts`. This will attempt to start a training run on Modal.
+To run training locally, `egnn_crystal_classifier.ml_train.train` can be used directly:
+```python
+from egnn_crystal_classifier.ml_train.train import train
+from egnn_crystal_classifier.ml_train.hparams import HParams
+
+train(
+    exp_path=Path("path/to/experiment"),
+    coord_path=Path("path/to/position/graphs"),
+    label_path=Path("path/to/labels"),
+    label_map_path=Path("path/to/label_map.json"),
+    vol=None,           # Optional, can be a Volume object
+    device="cuda:0",    # or "cpu"
+    hp=HParams(),       # Hyperparameters for training
+)
 ```
 
 ## Installation
