@@ -82,7 +82,7 @@ def compute_ackland_jones(data_path):
 
 def compute_vorotop(data_path):
     vorotop = VoroTopModifier()
-    vorotop.filter_file = "benchmarking/FCC-BCC-ICOS-both-HCP"
+    vorotop.filter_file = "egnn_crystal_classifier/benchmarking/FCC-BCC-ICOS-both-HCP"
     return apply_heuristic(data_path, vorotop)
 
 
@@ -101,7 +101,7 @@ def compute_heuristic_accuracy(exp_name, data_path, heuristic):
         preds = compute_cna_diamond(data_path)
         return (preds == CORRECT_MAP_CNA_DIAMOND[exp_name]).sum().item() / len(preds)
     
-    elif heuristic == "Interval Common Neighbor Alaysis":
+    elif heuristic == "Interval Common Neighbor Analysis":
         preds = compute_icna(data_path)
         return (preds == CORRECT_MAP_ICNA[exp_name]).sum().item() / len(preds)
     

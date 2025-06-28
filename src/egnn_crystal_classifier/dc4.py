@@ -7,6 +7,7 @@ import torch
 import torch_geometric.data
 from ovito.data import DataCollection
 from scipy.spatial import cKDTree
+import json
 
 from egnn_crystal_classifier.ml_model.model import EGNN
 from egnn_crystal_classifier.ml_train.hparams import HParams
@@ -16,20 +17,22 @@ class DC4:
     def __init__(
         self,
         model: EGNN = None,
-        label_map: dict[str, int] = {},
+        label_map: dict[str, int] = None,
         hparams: HParams = HParams()
     ) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if model is None:
             # Load pretrained model
-            model = EGNN(
-                num_buckets=hparams.num_buckets,
-                num_features=hparams.num_features,
-                num_classes=len(label_map),
-                hidden_dim=hparams.hidden_dim,
-                num_layers=hparams.num_layers,
+            self.model = EGNN(
+                num_buckets = hparams.num_buckets,
+                hidden = hparams.num_hidden,
+                num_reg_layers = hparams.num_reg_layers,
+                num_classes = hparams.num_classes,
+                dropout_prob = hparams.dropout_prob,
             )
-            model.load_state_dict("egnn_crystal_classifier/ml_model/model_best.pth")
+            self.model.load_state_dict(
+                torch.load("egnn_crystal_classifier/ml_model/model_best.pth")
+            )
             print("No model provided. I will use my pretrained model.")
         else:
             assert isinstance(model, EGNN), "Model must be an EGNN instance."
@@ -40,13 +43,19 @@ class DC4:
         self.hparams = hparams
 
         # Mapping
+        if label_map is None:
+            label_map = json.loads(
+                (open("egnn_crystal_classifier/ml_model/label_map.json", "r")
+                 .read())
+            )
+            print("No label map provided, using defaults:", label_map)
         self.label_to_number = label_map
         self.number_to_label = {v: k for k, v in label_map.items()}
 
     def calculate(
         self,
         data: DataCollection,
-        batch_size: int = 64,
+        batch_size: int = 32,
     ) -> np.ndarray:
         """
         Calculate the crystal structure types for the given data.
@@ -67,14 +76,15 @@ class DC4:
                     pos_graphs=batch_graphs,
                     label_ints=None,
                     num_buckets=self.hparams.num_buckets,
-                    device=self.device,
+                    calc_device=self.device,
                 )
                 graphs = graphs.to(self.device)
 
+                batch_output, embeddings = self.model(graphs)
                 if i == 0:
-                    output = self.model(graphs)
+                    output = batch_output
                 else:
-                    output = torch.cat((output, self.model(graphs)), dim=0)
+                    output = torch.cat((output, batch_output), dim=0)
 
         predictions = output.argmax(dim=1).cpu().numpy()
         return predictions
