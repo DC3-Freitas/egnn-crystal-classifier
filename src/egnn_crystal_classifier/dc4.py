@@ -24,7 +24,7 @@ class DC4:
         """
         Initialize DC4 inference class. Loads pretrained model and
         preset labelmap if not provided. Auto-detects device (CPU or GPU).
-        
+
         Args:
             model (EGNN, optional): Pretrained EGNN model. Defaults to None.
             label_map (dict[str, int], optional): Mapping of labels to integers.
