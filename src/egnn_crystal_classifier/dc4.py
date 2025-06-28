@@ -28,7 +28,7 @@ class DC4:
                 hidden = hparams.num_hidden,
                 num_reg_layers = hparams.num_reg_layers,
                 num_classes = hparams.num_classes,
-                dropout_prob = hparams.dropout_prob,
+                dropout_prob = 0.0,
             )
             self.model.load_state_dict(
                 torch.load("egnn_crystal_classifier/ml_model/model_best.pth")
@@ -55,7 +55,6 @@ class DC4:
     def calculate(
         self,
         data: DataCollection,
-        batch_size: int = 32,
     ) -> np.ndarray:
         """
         Calculate the crystal structure types for the given data.
@@ -70,8 +69,8 @@ class DC4:
 
         pos_graphs = self.process_for_inference(data)
         with torch.no_grad():
-            for i in range(0, pos_graphs.shape[0], batch_size):
-                batch_graphs = pos_graphs[i:i + batch_size].to(self.device)
+            for i in range(0, pos_graphs.shape[0], self.hparams.batch_size):
+                batch_graphs = pos_graphs[i:i + self.hparams.batch_size].to(self.device)
                 graphs = construct_batched_graph(
                     pos_graphs=batch_graphs,
                     label_ints=None,
@@ -108,10 +107,10 @@ class DC4:
 
         pos_graphs = []
         tree = cKDTree(positions)
-        neighbors = tree.query(positions, k=self.hparams.num_buckets + 1)[1][:]
+        neighbors = tree.query(positions, k=self.hparams.nn_count + 1)[1][:]
 
         for i, neigh in enumerate(neighbors):
-            pos_graphs.append(np.array([positions[i] for i in neigh]))
+            pos_graphs.append(np.array([positions[j] for j in neigh]))
             assert i == neigh[0]
         pos_graphs = np.array(pos_graphs)
         pos_graphs = torch.tensor(pos_graphs, dtype=torch.float32, device=self.device)
