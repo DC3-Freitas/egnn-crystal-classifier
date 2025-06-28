@@ -3,3 +3,5 @@ outputs/
 __pycache__/
 .mypy_cache/
 src/egnn_crystal_classifier/benchmarking/md/
+build/
+src/egnn_crystal_classifier.egg-info/

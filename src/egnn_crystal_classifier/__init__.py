@@ -17,24 +17,11 @@ class DC4Modifier(ModifierInterface):
     will be implemented in the future.
     """
 
-    model: Any
-    run: Bool = (False, {"desc": "Click to start model processing."})
-    device: str = "cpu"
-    label_map: dict[str, int] | None = None
+    model_info = Any()
+    run = Bool(False, help="Click to start model processing.")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        assert isinstance(
-            self.model, (str, type(None))
-        ), "Model must be a string path to the model or None for default model."
-        if isinstance(self.model, str):
-            self.model = DC4(
-                model_path=self.model,
-                label_map=self.label_map,
-                hparams=HParams(),
-            )
-        else:
-            self.model = DC4()
 
     def modify(self, data: DataCollection, frame: int, **kwargs) -> None:
         """
@@ -46,5 +33,16 @@ class DC4Modifier(ModifierInterface):
             frame (int): The current frame number.
             **kwargs: Additional keyword arguments (not used).
         """
+        if not self.run:
+            return
+        assert isinstance(
+            self.model_info, (str, type(None))
+        ), "Model must be a string path to the model or None for default model."
+        if isinstance(self.model_info, str):
+            self.model = DC4(
+                model_path=self.model_info,
+            )
+        else:
+            self.model = DC4()
         outputs = self.model.calculate(data)
         data.particles_.create_property("Particle Type", data=outputs)
