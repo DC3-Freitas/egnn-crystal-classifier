@@ -1,7 +1,7 @@
 from scipy.spatial import cKDTree
 import numpy as np
 
-def compute_coherence(positions, embeddings, num_neighbors=16):
+def compute_coherence(positions, embeddings, num_neighbors):
     """
     Computes the coherence of ML embeddings for atoms in a crystal structure.
     
@@ -24,13 +24,14 @@ def compute_coherence(positions, embeddings, num_neighbors=16):
             ).real
     return embedding_similarity / num_neighbors
 
-def get_amorphous_mask(positions, embeddings, cutoff=-1):
+def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
     """
     Determines which atoms are amorphous based on coherence.
     
     Args:
         positions (np.ndarray): Array of atomic positions in the crystal structure.
         embeddings (np.ndarray): Array of ML embeddings for each atom.
+        num_neighbors (int): Number of nearest neighbors to consider for coherence.
         cutoff (float): The distance threshold for coherence.
             If cutoff is -1, then we attempt to compute it automatically
             by taking the histogram and finding value that minimizes inter-class variance.
@@ -39,7 +40,7 @@ def get_amorphous_mask(positions, embeddings, cutoff=-1):
         np.ndarray: Boolean array indicating whether each atom is amorphous (True) or not (False).
     """
     
-    embedding_similarity = compute_coherence(positions, embeddings, cutoff)
+    embedding_similarity = compute_coherence(positions, embeddings, num_neighbors)
     if cutoff == -1:
         # automatically determine the cutoff using Otsu's method
         hist, bin_edges = np.histogram(embedding_similarity, bins=100)
