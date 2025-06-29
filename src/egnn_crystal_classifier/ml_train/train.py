@@ -19,7 +19,7 @@ def get_loaders(
     coord_path: Path,
     label_path: Path,
     label_map_path: Path,
-    device: str,
+    device: torch.device,
     hp: HParams,
 ) -> tuple[FastLoader, FastLoader, FastLoader]:
     # Load data and do some quick checks
@@ -43,12 +43,14 @@ def get_loaders(
 
     use_indices = np.random.permutation(num_data_points)
 
+    # Indices for dataset
     train_indices = use_indices[0:train_section]
     train_eval_indices = np.random.choice(
         train_indices, size=train_eval_size, replace=False
     )
     test_indices = use_indices[train_section:num_data_points]
 
+    # Datasets
     train_dataset = CrystalDataset(
         pos_graphs[train_indices], [label_strs[i] for i in train_indices], label_map
     )
@@ -61,6 +63,7 @@ def get_loaders(
         pos_graphs[test_indices], [label_strs[i] for i in test_indices], label_map
     )
 
+    # Dataloaders
     train_loader = FastLoader(
         train_dataset, hp.batch_size, hp.num_buckets, device, shuffle=True
     )
@@ -177,7 +180,7 @@ def train(
     label_path: Path,
     label_map_path: Path,
     vol: Volume | None,
-    device: str,
+    device: torch.device,
     hp: HParams,
 ) -> None:
     # Prepare info
@@ -251,7 +254,7 @@ def train(
         train_accuracies.append(train_acc)
         test_accuracies.append(test_acc)
 
-        # Commit all changes to colume
+        # Commit all changes to volume
         if vol is not None:
             vol.commit()
 

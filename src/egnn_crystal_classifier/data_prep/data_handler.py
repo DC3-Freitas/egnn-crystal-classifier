@@ -3,14 +3,13 @@ from typing import Any, Iterator
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from torch import Tensor
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 
 from egnn_crystal_classifier.data_prep.graph_construction import construct_batched_graph
 
 
-class CrystalDataset(Dataset[tuple[Tensor, Tensor | None]]):
+class CrystalDataset(Dataset[tuple[torch.Tensor, torch.Tensor | None]]):
     def __init__(
         self,
         pos_graphs: NDArray[np.number[Any]],
@@ -34,8 +33,8 @@ class CrystalDataset(Dataset[tuple[Tensor, Tensor | None]]):
         return self.pos_graphs.shape[0]
 
     def __getitem__(
-        self, idx: int | slice | list[int] | Tensor
-    ) -> tuple[Tensor, Tensor | None]:
+        self, idx: int | slice | list[int] | torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         pos_graphs_ret = self.pos_graphs[idx].contiguous()
         label_ints_ret = (
             self.label_ints[idx].contiguous() if self.label_ints is not None else None
@@ -49,7 +48,7 @@ class FastLoader:
         dataset: CrystalDataset,
         batch_size: int,
         num_buckets: int,
-        calc_device: str,
+        calc_device: torch.device,
         shuffle: bool,
     ) -> None:
         self.dataset = dataset
@@ -66,9 +65,9 @@ class FastLoader:
         indices = torch.arange(len(self.dataset))
 
         if self.shuffle:
-            indices = indices[torch.randperm(len(indices))]
+            indices = indices[torch.randperm(indices.shape[0])]
 
-        for start in range(0, len(indices), self.batch_size):
+        for start in range(0, indices.shape[0], self.batch_size):
             batch_indices = indices[start : start + self.batch_size]
             pos_graphs, label_ints = self.dataset[batch_indices]
 

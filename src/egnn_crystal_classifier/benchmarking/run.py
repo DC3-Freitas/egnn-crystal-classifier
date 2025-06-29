@@ -1,11 +1,14 @@
 import os
+import time
+
 import numpy as np
 import pandas as pd
+from DC3.dc3 import DC3
+from DC3.dc3 import create_model as create_dc3_model
 from ovito.io import import_file
-from egnn_crystal_classifier.dc4 import DC4
-from DC3.dc3 import DC3, create_model as create_dc3_model
+
 from egnn_crystal_classifier.benchmarking.heuristics import compute_heuristic_accuracy
-import time
+from egnn_crystal_classifier.dc4 import DC4
 
 SIM_TEMPERATURE_FRACTIONS = np.round(np.arange(0.04, 1.60 + 0.04, 0.04), 6)
 EXP_TO_CLASSIFIERS = {

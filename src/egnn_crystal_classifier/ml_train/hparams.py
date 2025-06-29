@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class HParams:
-    nn_count: int = 16
+    num_neighbors: int = 16
     num_buckets: int = 24
     num_hidden: int = 64
     num_reg_layers: int = 2
@@ -13,7 +13,7 @@ class HParams:
 
     train_split_frac: float = 0.8
     train_eval_sample_frac: float = 0.25
-    batch_size: int = 128
+    batch_size: int = 1024
 
     epochs: int = 100
     lr: float = 0.01

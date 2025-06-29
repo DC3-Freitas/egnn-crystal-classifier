@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing
 from torch_scatter import scatter
@@ -18,7 +17,7 @@ class ConvLayer(MessagePassing):
 
         self.edge_mlp = nn.Sequential(
             nn.Linear(input_size + input_size + 1 + num_buckets, hidden_and_output),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Dropout(p=dropout_prob),
         )
         self.coord_mlp = nn.Sequential(
@@ -30,20 +29,20 @@ class ConvLayer(MessagePassing):
 
         self.node_mlp = nn.Sequential(
             nn.Linear(input_size + hidden_and_output, hidden_and_output),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Dropout(p=dropout_prob),
             nn.Linear(hidden_and_output, hidden_and_output),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Dropout(p=dropout_prob),
         )
 
     def forward(
         self,
-        h: Tensor,
-        x: Tensor,
-        edge_index: Tensor,
-        edge_angle_hist: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+        h: torch.Tensor,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_angle_hist: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # Prepare
         row, col = edge_index
         deg = scatter(torch.ones_like(row), row, dim=0, dim_size=x.size(0))
@@ -76,7 +75,7 @@ class ConvLayer(MessagePassing):
 
         return node_out, x_new
 
-    def message(self, m: Tensor) -> Tensor:
+    def message(self, m: torch.Tensor) -> torch.Tensor:
         return m
 
 
@@ -106,15 +105,15 @@ class EGNN(nn.Module):
         # Don't add any activation at the end since we use CrossEntropyLoss
         self.classifier_mlp = nn.Sequential(
             nn.Linear(hidden, hidden),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Dropout(p=dropout_prob),
             nn.Linear(hidden, hidden),
-            nn.ReLU(),
+            nn.SiLU(),
             nn.Dropout(p=dropout_prob),
             nn.Linear(hidden, num_classes),
         )
 
-    def forward(self, data: Data) -> tuple[Tensor, Tensor]:
+    def forward(self, data: Data) -> tuple[torch.Tensor, torch.Tensor]:
         pos_norm, edge_index, edge_angle_hist, center_mask = (
             data.pos_norm,
             data.edge_index,

@@ -11,6 +11,7 @@ import os
 import numpy as np
 from ovito.io import import_file
 from scipy.spatial import cKDTree
+
 from egnn_crystal_classifier.constants import *
 
 

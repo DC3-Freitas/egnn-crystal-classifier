@@ -2,18 +2,23 @@
 Core class for DC4 inference.
 """
 
+import json
+import os
+
 import numpy as np
 import torch
 from ovito.data import DataCollection
-import json
 
-from egnn_crystal_classifier.ml_model.model import EGNN
-from egnn_crystal_classifier.ml_train.hparams import HParams
-from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
-from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
 from egnn_crystal_classifier.amorphous.coherence import get_amorphous_mask
 from egnn_crystal_classifier.amorphous.outlier import get_outlier_mask
 from egnn_crystal_classifier.constants import *
+from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
+from egnn_crystal_classifier.data_prep.graph_construction import (
+    construct_batched_graph,
+    construct_graph_lists,
+)
+from egnn_crystal_classifier.ml_model.model import EGNN
+from egnn_crystal_classifier.ml_train.hparams import HParams
 
 
 class DC4:
@@ -45,7 +50,7 @@ class DC4:
                 hidden=hparams.num_hidden,
                 num_reg_layers=hparams.num_reg_layers,
                 num_classes=hparams.num_classes,
-                dropout_prob=0.0,
+                dropout_prob=hparams.dropout_prob,
             )
             self.model.load_state_dict(torch.load(MODEL_PATH, map_location=self.device))
             print("No model provided. I will use my pretrained model.")
@@ -75,7 +80,9 @@ class DC4:
 
         # TODO make these paths configurable
         self.perfect_embeddings = np.load(PERFECT_EMBEDDINGS_PATH)
-        self.perfect_embeddings = torch.from_numpy(self.perfect_embeddings).to(self.device)
+        self.perfect_embeddings = torch.from_numpy(self.perfect_embeddings).to(
+            self.device
+        )
         self.delta_cutoffs = np.load(DELTA_CUTOFFS_PATH)
         self.delta_cutoffs = torch.from_numpy(self.delta_cutoffs).to(self.device)
 
@@ -96,7 +103,7 @@ class DC4:
 
         neighbors, pos_graphs = construct_graph_lists(
             pos_individual=data.particles.positions,
-            num_neighbors=self.hparams.nn_count,
+            num_neighbors=self.hparams.num_neighbors,
         )
         dataset = CrystalDataset(
             pos_graphs=pos_graphs,
@@ -136,6 +143,8 @@ class DC4:
                 ref_embeddings=self.perfect_embeddings,
                 delta_cutoffs=self.delta_cutoffs,
             )
-            predictions[np.where(amorphous_mask == 1)] = self.label_to_number["amorphous"]
+            predictions[np.where(amorphous_mask == 1)] = self.label_to_number[
+                "amorphous"
+            ]
             predictions[np.where(outlier_mask == 1)] = self.label_to_number["unknown"]
         return predictions

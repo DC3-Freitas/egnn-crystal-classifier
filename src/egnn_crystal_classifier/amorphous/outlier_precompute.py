@@ -1,20 +1,20 @@
+import json
+import os
 from typing import Any
 
-import os
-import json
 import numpy as np
-from tqdm import tqdm
 import torch
 from numpy.typing import NDArray
 from ovito.data import DataCollection
 from ovito.io import import_file
+from tqdm import tqdm
 
-from egnn_crystal_classifier.ml_model.model import EGNN
-from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
-from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
-from egnn_crystal_classifier.ml_train.hparams import HParams
-from egnn_crystal_classifier.data_gen.gen import gen
 from egnn_crystal_classifier.constants import *
+from egnn_crystal_classifier.data_gen.gen import gen
+from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
+from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
+from egnn_crystal_classifier.ml_model.model import EGNN
+from egnn_crystal_classifier.ml_train.hparams import HParams
 
 
 def compute_perfect_embeddings(
@@ -38,7 +38,7 @@ def compute_perfect_embeddings(
         torch.Tensor: Embeddings for each atom in the crystal structure.
     """
     _, pos_graphs = construct_graph_lists(
-        structure.particles.positions, num_neighbors=hparams.nn_count
+        structure.particles.positions, num_neighbors=hparams.num_neighbors
     )
     dataset = CrystalDataset(
         pos_graphs=pos_graphs,

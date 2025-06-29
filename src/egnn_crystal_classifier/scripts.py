@@ -3,6 +3,7 @@ from pathlib import Path
 
 import modal
 import numpy as np
+import torch
 from modal import Volume
 
 from egnn_crystal_classifier.ml_model.model import EGNN
@@ -13,8 +14,31 @@ app = modal.App()
 
 image = (
     modal.Image.debian_slim()
+    .apt_install(
+        "libegl1",
+        "libgl1",
+        "libopengl0",
+        "libglvnd0",
+        "libdbus-1-3",
+        "libglib2.0-0",
+        "libxkbcommon-x11-0",
+        "libxcb-icccm4",
+        "libxcb-image0",
+        "libxcb-keysyms1",
+        "libxcb-render-util0",
+        "libxcb-xinerama0",
+        "libxcb-xinput0",
+        "libxcb-randr0",
+    )
     .pip_install(
-        "torch", "torch_geometric", "tqdm", "ovito", "matplotlib", "numpy", "scipy"
+        "torch",
+        "torch_geometric",
+        "tqdm",
+        "ovito",
+        "matplotlib",
+        "numpy",
+        "scipy",
+        "pandas",
     )
     .pip_install("torch-scatter", "torch-sparse", "torch-cluster", "torch-spline-conv")
 ).add_local_python_source("egnn_crystal_classifier")
@@ -65,7 +89,7 @@ def run_train(
         Path(label_path),
         Path(label_map_path),
         vol,
-        device,
+        torch.device(device),
         hp,
     )
 
@@ -81,7 +105,7 @@ def main() -> None:
     hp = HParams()
     with app.run():
         run_train.remote(
-            ("/root/egnn/dropout_05_epochs_100_updated_logging"),
+            ("/root/egnn/dropout_05_epochs_100_silu"),
             ("/root/egnn/data/coords.npy"),
             ("/root/egnn/data/labels.json"),
             ("/root/egnn/data/label_map.json"),
