@@ -21,6 +21,7 @@ class DC4:
         self,
         model: EGNN = None,
         label_map: dict[str, int] = None,
+        coherence_cutoff: float = -1.0,
         hparams: HParams = HParams(),
     ) -> None:
         """
@@ -73,6 +74,8 @@ class DC4:
         self.label_to_number = label_map
         self.number_to_label = {v: k for k, v in label_map.items()}
 
+        self.coherence_cutoff = coherence_cutoff
+
     def calculate(
         self,
         data: DataCollection,
@@ -115,7 +118,7 @@ class DC4:
             positions=data.particles.positions,
             embeddings=embeddings_list.cpu().numpy(),
             num_neighbors=self.hparams.nn_count,
-            cutoff=-1,  # Automatically determine cutoff
+            cutoff=self.coherence_cutoff,
         )
         predictions[np.where(amorphous_mask == 1)] = self.label_to_number["amorphous"]
         return predictions
@@ -146,9 +149,11 @@ class DC4:
 
         return pos_graphs
 
+
 if __name__ == "__main__":
     model = DC4()
     from ovito.io import import_file
+
     pipeline = import_file("bcc.dump")
     data = pipeline.compute(130)
     predictions = model.calculate(data)

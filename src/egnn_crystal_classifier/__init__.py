@@ -6,7 +6,7 @@ from egnn_crystal_classifier.dc4 import DC4
 from egnn_crystal_classifier.ml_train.hparams import HParams
 from ovito.data import DataCollection
 from ovito.pipeline import ModifierInterface
-from traits.api import Any, Bool
+from traits.api import Any, Bool, Float
 
 
 class DC4Modifier(ModifierInterface):
@@ -19,6 +19,9 @@ class DC4Modifier(ModifierInterface):
 
     model_info = Any()
     run = Bool(False, help="Click to start model processing.")
+    coherence_cutoff = Float(
+        -1.0, help="Coherence cutoff for amorphous structure detection."
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -43,6 +46,8 @@ class DC4Modifier(ModifierInterface):
                 model_path=self.model_info,
             )
         else:
-            self.model = DC4()
+            self.model = DC4(
+                coherence_cutoff=self.coherence_cutoff,
+            )
         outputs = self.model.calculate(data)
         data.particles_.create_property("Particle Type", data=outputs)

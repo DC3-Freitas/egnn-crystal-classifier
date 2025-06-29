@@ -1,15 +1,16 @@
 from scipy.spatial import cKDTree
 import numpy as np
 
+
 def compute_coherence(positions, embeddings, num_neighbors):
     """
     Computes the coherence of ML embeddings for atoms in a crystal structure.
-    
+
     Args:
         positions (np.ndarray): Array of atomic positions in the crystal structure.
         embeddings (np.ndarray): Array of ML embeddings for each atom.
         cutoff (float): The distance threshold for coherence.
-        
+
     Returns:
         np.ndarray: Array of coherence values for each atom, where lower values indicate higher coherence.
     """
@@ -24,10 +25,11 @@ def compute_coherence(positions, embeddings, num_neighbors):
             ).real
     return embedding_similarity / num_neighbors
 
+
 def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
     """
     Determines which atoms are amorphous based on coherence.
-    
+
     Args:
         positions (np.ndarray): Array of atomic positions in the crystal structure.
         embeddings (np.ndarray): Array of ML embeddings for each atom.
@@ -35,11 +37,11 @@ def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
         cutoff (float): The distance threshold for coherence.
             If cutoff is -1, then we attempt to compute it automatically
             by taking the histogram and finding value that minimizes inter-class variance.
-        
+
     Returns:
         np.ndarray: Boolean array indicating whether each atom is amorphous (True) or not (False).
     """
-    
+
     embedding_similarity = compute_coherence(positions, embeddings, num_neighbors)
     if cutoff == -1:
         # automatically determine the cutoff using Otsu's method
@@ -59,4 +61,5 @@ def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
 
         idx = np.argmax(variance12)
         cutoff = bin_centers[idx]
+        print(f"Automatically determined cutoff: {cutoff}")
     return embedding_similarity < cutoff

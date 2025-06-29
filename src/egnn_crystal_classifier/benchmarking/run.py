@@ -139,7 +139,7 @@ def main() -> None:
     if not os.path.exists(md_data_path):
         print(
             "I can't find the MD simulation data directory. Please make sure it's",
-            "present in the expected location: 'egnn_crystal_classifier/benchmarking/md'."
+            "present in the expected location: 'egnn_crystal_classifier/benchmarking/md'.",
         )
 
     # If an experiment is specified, run only that one

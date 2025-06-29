@@ -18,6 +18,7 @@ CHECKERBOARD_CELL_SIZE_XZ = 4
 CHECKERBOARD_CELL_SIZE_Y = 3
 CHECKERBOARD_CELL_COUNT = 3
 
+
 def gen():
     # Extract data
     x_data = []
