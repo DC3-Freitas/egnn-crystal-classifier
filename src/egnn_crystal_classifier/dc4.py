@@ -4,17 +4,15 @@ Core class for DC4 inference.
 
 import numpy as np
 import torch
-import torch_geometric.data
 from ovito.data import DataCollection
-from scipy.spatial import cKDTree
 import json
-import os
 
 from egnn_crystal_classifier.ml_model.model import EGNN
 from egnn_crystal_classifier.ml_train.hparams import HParams
 from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
 from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
 from egnn_crystal_classifier.amorphous.coherence import get_amorphous_mask
+from egnn_crystal_classifier.constants import *
 
 
 class DC4:
@@ -38,7 +36,6 @@ class DC4:
         """
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        base_dir = os.path.abspath(os.path.dirname(__file__))
         if model is None:
             # Load pretrained model
             self.model = EGNN(
@@ -48,9 +45,7 @@ class DC4:
                 num_classes=hparams.num_classes,
                 dropout_prob=0.0,
             )
-            self.model.load_state_dict(
-                torch.load(base_dir + "/ml_model/model_best.pth")
-            )
+            self.model.load_state_dict(torch.load(MODEL_PATH, map_location=self.device))
             print("No model provided. I will use my pretrained model.")
         else:
             assert isinstance(model, EGNN), "Model must be an EGNN instance."
@@ -62,9 +57,7 @@ class DC4:
 
         # Mapping
         if label_map is None:
-            label_map = json.loads(
-                (open(base_dir + "/ml_model/label_map.json", "r").read())
-            )
+            label_map = json.loads((open(LABEL_MAP_PATH).read()))
             print("No label map provided, using defaults:", label_map)
 
         # Inject additional labels

@@ -11,66 +11,48 @@ import os
 import numpy as np
 from ovito.io import import_file
 from scipy.spatial import cKDTree
-
-NN_COUNT = 16
-SYNTH_DATA_PATH = "synthetic_data"
-CHECKERBOARD_CELL_SIZE_XZ = 4
-CHECKERBOARD_CELL_SIZE_Y = 3
-CHECKERBOARD_CELL_COUNT = 3
+from egnn_crystal_classifier.constants import *
 
 
-def gen():
-    # Extract data
+def extract_center(fname):
+    """
+    Extracts a small sample from the center of a structure
+    """
+
+    # Load data
+    pipeline = import_file(fname)
+    lattice = pipeline.compute()
+    positions = np.copy(lattice.particles.positions)
+
+    # crop center
+    # synth data has box size ~ n = 10, so we cut the samples of size 1
+    center = np.mean(positions, axis=0) + np.random.normal(0, 0.5, size=3)
+    size_xz = CHECKERBOARD_CELL_SIZE_XZ
+    size_y = CHECKERBOARD_CELL_SIZE_Y
+    cropped_positions = positions[
+        (positions[:, 0] > center[0] - size_xz / 2)
+        & (positions[:, 0] < center[0] + size_xz / 2)
+        & (positions[:, 1] > center[1] - size_y / 2)
+        & (positions[:, 1] < center[1] + size_y / 2)
+        & (positions[:, 2] > center[2] - size_xz / 2)
+        & (positions[:, 2] < center[2] + size_xz / 2)
+    ]
+
+    # normalize coordinates
+    normalized_positions = cropped_positions - np.min(cropped_positions, axis=0)
+    return normalized_positions
+
+
+def create_checker_structures():
+    """
+    Creates bi-structured checkerboards from the synthetic data in order to
+    help model generalize and work better in interfaces between different structures.
+    """
+    available_temps = os.listdir(os.path.join(SYNTH_DATA_PATH, "bcc"))
+    structure_names = os.listdir(SYNTH_DATA_PATH)
+
     x_data = []
     y_data = []
-
-    structure_cnts = {}
-
-    for structure in os.listdir(SYNTH_DATA_PATH):
-        for f in os.listdir(os.path.join(SYNTH_DATA_PATH, structure)):
-            pipeline = import_file(os.path.join(SYNTH_DATA_PATH, structure, f))
-
-            lattice = pipeline.compute()
-            num_atoms = lattice.particles.count
-
-            all_positions = np.copy(lattice.particles.positions)
-            x_data.append(all_positions)
-            y_data.append([structure] * len(all_positions))
-            structure_cnts[structure] = structure_cnts.get(structure, 0) + len(
-                all_positions
-            )
-
-    def extract_center(fname):
-        """
-        Extracts a small sample from the center of a structure
-        """
-
-        # Load data
-        pipeline = import_file(fname)
-        lattice = pipeline.compute()
-        positions = np.copy(lattice.particles.positions)
-
-        # crop center
-        # synth data has box size ~ n = 10, so we cut the samples of size 1
-        center = np.mean(positions, axis=0) + np.random.normal(0, 0.5, size=3)
-        size_xz = CHECKERBOARD_CELL_SIZE_XZ
-        size_y = CHECKERBOARD_CELL_SIZE_Y
-        cropped_positions = positions[
-            (positions[:, 0] > center[0] - size_xz / 2)
-            & (positions[:, 0] < center[0] + size_xz / 2)
-            & (positions[:, 1] > center[1] - size_y / 2)
-            & (positions[:, 1] < center[1] + size_y / 2)
-            & (positions[:, 2] > center[2] - size_xz / 2)
-            & (positions[:, 2] < center[2] + size_xz / 2)
-        ]
-
-        # normalize coordinates
-        normalized_positions = cropped_positions - np.min(cropped_positions, axis=0)
-
-        return normalized_positions
-
-    available_temps = os.listdir(os.path.join(SYNTH_DATA_PATH, "bcc"))
-    structure_names = list(structure_cnts.keys())
 
     for temp in available_temps:
         for i in range(len(structure_names)):
@@ -119,6 +101,32 @@ def gen():
 
                 x_data.append(checkerboard_positions)
                 y_data.append(labels)
+
+    return x_data, y_data
+
+
+def gen(use_checker: bool = True):
+    # Extract data
+    x_data = []
+    y_data = []
+
+    structure_cnts = {}
+
+    for structure in os.listdir(SYNTH_DATA_PATH):
+        for f in os.listdir(os.path.join(SYNTH_DATA_PATH, structure)):
+            pipeline = import_file(os.path.join(SYNTH_DATA_PATH, structure, f))
+            lattice = pipeline.compute()
+            all_positions = np.copy(lattice.particles.positions)
+            x_data.append(all_positions)
+            y_data.append([structure] * len(all_positions))
+            structure_cnts[structure] = structure_cnts.get(structure, 0) + len(
+                all_positions
+            )
+
+    if use_checker:
+        x_data_checker, y_data_checker = create_checker_structures()
+        x_data.extend(x_data_checker)
+        y_data.extend(y_data_checker)
 
     # Extract data
     x_data_new = []

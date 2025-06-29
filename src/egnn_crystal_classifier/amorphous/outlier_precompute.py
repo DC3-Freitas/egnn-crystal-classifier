@@ -1,20 +1,20 @@
-"""
-UNTESTED CODE
-"""
-
 from typing import Any
 
 import os
+import json
 import numpy as np
+from tqdm import tqdm
 import torch
 from numpy.typing import NDArray
 from ovito.data import DataCollection
+from ovito.io import import_file
 
 from egnn_crystal_classifier.ml_model.model import EGNN
 from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
 from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
 from egnn_crystal_classifier.ml_train.hparams import HParams
 from egnn_crystal_classifier.data_gen.gen import gen
+from egnn_crystal_classifier.constants import *
 
 
 def compute_perfect_embeddings(
@@ -38,7 +38,7 @@ def compute_perfect_embeddings(
         torch.Tensor: Embeddings for each atom in the crystal structure.
     """
     _, pos_graphs = construct_graph_lists(
-        structure.particles.positions, num_neighbors=model.hparams.nn_count
+        structure.particles.positions, num_neighbors=hparams.nn_count
     )
     dataset = CrystalDataset(
         pos_graphs=pos_graphs,
@@ -52,7 +52,7 @@ def compute_perfect_embeddings(
         calc_device=calc_device,
         shuffle=False,
     )
-    embeddings_avg = torch.zeros(hparams.embedding_dim, device=calc_device)
+    embeddings_avg = torch.zeros(hparams.num_hidden, device=calc_device)
     with torch.no_grad():
         for graphs in loader:
             graphs = graphs.to(calc_device)
@@ -68,7 +68,7 @@ def compute_delta_cutoffs(
     y_data: list[str],
     label_map: dict[str, int] | None,
     model: EGNN,
-    batch_size: int,
+    hparams: HParams,
     calc_device: torch.device,
 ) -> NDArray[np.floating[Any]]:
     """
@@ -95,14 +95,14 @@ def compute_delta_cutoffs(
     )
     loader = FastLoader(
         dataset=dataset,
-        batch_size=batch_size,
-        num_buckets=model.hparams.num_buckets,
+        batch_size=hparams.batch_size,
+        num_buckets=hparams.num_buckets,
         calc_device=calc_device,
         shuffle=False,
     )
     distances = [[] for _ in range(len(perfect_embeddings))]
     with torch.no_grad():
-        for i, graphs in enumerate(loader):
+        for i, graphs in tqdm(enumerate(loader)):
             graphs = graphs.to(calc_device)
             _, embeddings = model(graphs)
             class_label_nums = graphs.y.cpu().numpy()
@@ -122,52 +122,59 @@ def compute_delta_cutoffs(
     return delta_cutoffs
 
 
-def run_outlier_precompute() -> None:
+def run_outlier_precompute(
+    model_path: str = MODEL_PATH,
+    label_map_path: str = LABEL_MAP_PATH,
+) -> None:
     """
     Precomputes the perfect embeddings and delta cutoffs for outlier detection.
     Stores the results in `perfect_embeddings.npy` and `delta_cutoffs.npy`.
     """
-    
+
     # TODO Should fix gen to have customization options,
     # so we can disable noisy data generation that may interfere
-    
+
     x_data, y_data, label_map = gen()
     calc_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     hparams = HParams()
-    model = EGNN()
-    
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    model.load_state_dict(
-        torch.load(base_dir + "/ml_model/model_best.pth", map_location=calc_device)
+    model = EGNN(
+        num_buckets=hparams.num_buckets,
+        hidden=hparams.num_hidden,
+        num_reg_layers=hparams.num_reg_layers,
+        num_classes=hparams.num_classes,
+        dropout_prob=0.0,
     )
+
+    label_map = json.loads(open(label_map_path, "r").read())
+    model.load_state_dict(torch.load(model_path, map_location=calc_device))
+    model.to(calc_device)
     model.eval()
 
-    perfect_structure_names = os.listdir(
-        base_dir + "/perfect_structures"
-    )  # TODO: Get perfect structures
-    perfect_embeddings = []
+    perfect_structure_names = os.listdir(PERFECT_LATTICES_PATH)
+    perfect_embeddings = [0] * len(perfect_structure_names)
     for structure_name in perfect_structure_names:
-        structure = DataCollection()
-        structure.load(base_dir + "/perfect_structures/" + structure_name)
-        perfect_embeddings.append(
+        structure_path = os.path.join(PERFECT_LATTICES_PATH, structure_name)
+        structure = import_file(structure_path).compute()
+        perfect_embeddings[label_map[structure_name.split(".")[0]]] = (
             compute_perfect_embeddings(
                 structure, model, hparams.batch_size, calc_device, hparams
             )
         )
 
     perfect_embeddings = torch.stack(perfect_embeddings).to(calc_device)
-    perfect_embeddings = perfect_embeddings.cpu().numpy()
+    print("Computed perfect embeddings for", len(perfect_embeddings), "structures.")
     delta_cutoffs = compute_delta_cutoffs(
         perfect_embeddings,
         x_data,
         y_data,
         label_map,
         model,
-        hparams.batch_size,
+        hparams,
         calc_device,
     )
-    np.save(base_dir + "/perfect_embeddings.npy", perfect_embeddings)
-    np.save(base_dir + "/delta_cutoffs.npy", delta_cutoffs)
+    np.save(PERFECT_EMBEDDINGS_PATH, perfect_embeddings.cpu().numpy())
+    np.save(DELTA_CUTOFFS_PATH, delta_cutoffs)
+    print("Computed cutoffs:", delta_cutoffs)
 
 
 if __name__ == "__main__":
