@@ -19,9 +19,7 @@ class DC4Modifier(ModifierInterface):
 
     model_info = Any()
     run = Bool(False, help="Click to start model processing.")
-    coherence_cutoff = Float(
-        -1.0, help="Coherence cutoff for amorphous structure detection."
-    )
+    coherence_cutoff = Any(help="Coherence cutoff for amorphous structure detection.")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -41,6 +39,9 @@ class DC4Modifier(ModifierInterface):
         assert isinstance(
             self.model_info, (str, type(None))
         ), "Model must be a string path to the model or None for default model."
+        assert isinstance(
+            self.coherence_cutoff, (float, type(None))
+        ), "Coherence cutoff must be a float or None."
         if isinstance(self.model_info, str):
             self.model = DC4(
                 model_path=self.model_info,

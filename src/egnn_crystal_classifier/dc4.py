@@ -12,7 +12,8 @@ import os
 
 from egnn_crystal_classifier.ml_model.model import EGNN
 from egnn_crystal_classifier.ml_train.hparams import HParams
-from egnn_crystal_classifier.data_prep.graph_construction import construct_batched_graph
+from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
+from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
 from egnn_crystal_classifier.amorphous.coherence import get_amorphous_mask
 
 
@@ -21,7 +22,7 @@ class DC4:
         self,
         model: EGNN = None,
         label_map: dict[str, int] = None,
-        coherence_cutoff: float = -1.0,
+        coherence_cutoff: float | None = None,
         hparams: HParams = HParams(),
     ) -> None:
         """
@@ -91,20 +92,25 @@ class DC4:
             np.ndarray: Predicted crystal structure types.
         """
 
-        pos_graphs = self.process_for_inference(data)
+        neighbors, pos_graphs = construct_graph_lists(
+            pos_individual=data.particles.positions,
+            num_neighbors=self.hparams.nn_count,
+        )
+        dataset = CrystalDataset(
+            pos_graphs=pos_graphs,
+            label_strs=None,
+            label_map=self.label_to_number,
+        )
+        loader = FastLoader(
+            dataset=dataset,
+            batch_size=self.hparams.batch_size,
+            num_buckets=self.hparams.num_buckets,
+            calc_device=self.device,
+            shuffle=False,
+        )
         with torch.no_grad():
-            for i in range(0, pos_graphs.shape[0], self.hparams.batch_size):
-                batch_graphs = pos_graphs[i : i + self.hparams.batch_size].to(
-                    self.device
-                )
-                graphs = construct_batched_graph(
-                    pos_graphs=batch_graphs,
-                    label_ints=None,
-                    num_buckets=self.hparams.num_buckets,
-                    calc_device=self.device,
-                )
+            for i, graphs in enumerate(loader):
                 graphs = graphs.to(self.device)
-
                 batch_output, embeddings = self.model(graphs)
                 if i == 0:
                     output = batch_output
@@ -115,46 +121,11 @@ class DC4:
 
         predictions = output.argmax(dim=1).cpu().numpy()
         amorphous_mask = get_amorphous_mask(
-            positions=data.particles.positions,
-            embeddings=embeddings_list.cpu().numpy(),
-            num_neighbors=self.hparams.nn_count,
+            neighbors_raw=neighbors,
+            embeddings=embeddings_list,
+            batch_size=self.hparams.batch_size,
+            calc_device=self.device,
             cutoff=self.coherence_cutoff,
         )
         predictions[np.where(amorphous_mask == 1)] = self.label_to_number["amorphous"]
         return predictions
-
-    def process_for_inference(self, data: DataCollection) -> torch_geometric.data.Data:
-        """
-        Process OVITO datacollection into individual position graphs
-        in preparation for inference.
-
-        Args:
-            data (DataCollection): The input data collection.
-
-        Returns:
-            torch.Tensor: A tensor containing the position graphs.
-        """
-
-        positions = data.particles.positions
-
-        pos_graphs = []
-        tree = cKDTree(positions)
-        neighbors = tree.query(positions, k=self.hparams.nn_count + 1)[1][:]
-
-        for i, neigh in enumerate(neighbors):
-            pos_graphs.append(np.array([positions[j] for j in neigh]))
-            assert i == neigh[0]
-        pos_graphs = np.array(pos_graphs)
-        pos_graphs = torch.tensor(pos_graphs, dtype=torch.float32, device=self.device)
-
-        return pos_graphs
-
-
-if __name__ == "__main__":
-    model = DC4()
-    from ovito.io import import_file
-
-    pipeline = import_file("bcc.dump")
-    data = pipeline.compute(130)
-    predictions = model.calculate(data)
-    print(predictions)

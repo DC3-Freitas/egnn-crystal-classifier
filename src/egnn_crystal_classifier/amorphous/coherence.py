@@ -32,7 +32,7 @@ def get_amorphous_mask(
     embeddings: torch.Tensor,
     batch_size: int,
     calc_device: torch.device,
-    cutoff: int | None,
+    cutoff: float | None,
 ) -> NDArray[np.bool_]:
     """
     Determines which atoms are amorphous based on coherence.
@@ -42,7 +42,7 @@ def get_amorphous_mask(
         embeddings (np.ndarray): Array of ML embeddings for each atom.
         num_neighbors (int): Number of nearest neighbors to consider for coherence.
         cutoff (float): The distance threshold for coherence.
-            If cutoff is -1, then we attempt to compute it automatically
+            If cutoff is None, then we attempt to compute it automatically
             by taking the histogram and finding value that minimizes inter-class variance.
 
     Returns:
