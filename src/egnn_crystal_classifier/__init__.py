@@ -19,6 +19,9 @@ class DC4Modifier(ModifierInterface):
 
     model_info = Any()
     run = Bool(False, help="Click to start model processing.")
+    run_amorphous_outlier = Bool(
+        True, help="Run amorphous and outlier detection"
+    )
     coherence_cutoff = Any(help="Coherence cutoff for amorphous structure detection.")
 
     def __init__(self, **kwargs):
@@ -45,10 +48,13 @@ class DC4Modifier(ModifierInterface):
         if isinstance(self.model_info, str):
             self.model = DC4(
                 model_path=self.model_info,
+                coherence_cutoff=self.coherence_cutoff,
+                run_amorphous=self.run_amorphous_outlier,
             )
         else:
             self.model = DC4(
                 coherence_cutoff=self.coherence_cutoff,
+                run_amorphous=self.run_amorphous_outlier,
             )
         outputs = self.model.calculate(data)
         data.particles_.create_property("Particle Type", data=outputs)

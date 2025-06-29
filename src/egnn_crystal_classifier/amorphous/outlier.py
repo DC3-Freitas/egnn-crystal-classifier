@@ -31,4 +31,4 @@ def get_outlier_mask(
     return (
         torch.norm(embeddings - ref_embeddings[predictions])
         > delta_cutoffs[predictions]
-    )
+    ).cpu().numpy()
