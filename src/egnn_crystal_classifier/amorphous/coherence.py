@@ -1,32 +1,40 @@
-from scipy.spatial import cKDTree
+from typing import Any
+
 import numpy as np
+import torch
+from numpy.typing import NDArray
 
 
-def compute_coherence(positions, embeddings, num_neighbors):
-    """
-    Computes the coherence of ML embeddings for atoms in a crystal structure.
+def compute_coherence(
+    neighbors_np: NDArray[np.number[Any]],
+    embeddings: torch.Tensor,
+    batch_size: int,
+    calc_device: torch.device,
+) -> NDArray[np.floating[Any]]:
+    # important: neighbors for each atom is exclusive of the atom itself
+    neighbors_torch = torch.from_numpy(neighbors_np).long()
+    coh_fac = torch.zeros((embeddings.shape[0],))
 
-    Args:
-        positions (np.ndarray): Array of atomic positions in the crystal structure.
-        embeddings (np.ndarray): Array of ML embeddings for each atom.
-        cutoff (float): The distance threshold for coherence.
+    for start in range(0, embeddings.shape[0], batch_size):
+        neighbor_embeddings = embeddings[
+            neighbors_torch[start : start + batch_size]
+        ].to(calc_device)
+        center_embeddings = (
+            embeddings[start : start + batch_size].unsqueeze(1).to(calc_device)
+        )
+        dot_prods = (center_embeddings * neighbor_embeddings).sum(dim=-1)
+        coh_fac[start : start + batch_size] = dot_prods.mean(dim=1).cpu()
 
-    Returns:
-        np.ndarray: Array of coherence values for each atom, where lower values indicate higher coherence.
-    """
-
-    tree = cKDTree(positions)
-    neighbors = tree.query(positions, k=num_neighbors + 1)[1][:, 1:]
-    embedding_similarity = np.zeros(len(positions))
-    for i in range(len(positions)):
-        for j, neigh in enumerate(neighbors[i]):
-            embedding_similarity[i] += np.dot(
-                embeddings[i].conjugate(), embeddings[neigh]
-            ).real
-    return embedding_similarity / num_neighbors
+    return coh_fac.numpy()
 
 
-def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
+def get_amorphous_mask(
+    neighbors_np: NDArray[np.number[Any]],
+    embeddings: torch.Tensor,
+    batch_size: int,
+    calc_device: torch.device,
+    cutoff: int | None,
+) -> NDArray[np.bool_]:
     """
     Determines which atoms are amorphous based on coherence.
 
@@ -42,8 +50,11 @@ def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
         np.ndarray: Boolean array indicating whether each atom is amorphous (True) or not (False).
     """
 
-    embedding_similarity = compute_coherence(positions, embeddings, num_neighbors)
-    if cutoff == -1:
+    embedding_similarity = compute_coherence(
+        neighbors_np, embeddings, batch_size, calc_device
+    )
+
+    if cutoff is None:
         # automatically determine the cutoff using Otsu's method
         hist, bin_edges = np.histogram(embedding_similarity, bins=100)
         bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2
@@ -62,4 +73,5 @@ def get_amorphous_mask(positions, embeddings, num_neighbors=16, cutoff=-1):
         idx = np.argmax(variance12)
         cutoff = bin_centers[idx]
         print(f"Automatically determined cutoff: {cutoff}")
+
     return embedding_similarity < cutoff

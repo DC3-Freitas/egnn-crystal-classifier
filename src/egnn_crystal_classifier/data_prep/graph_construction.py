@@ -5,13 +5,12 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 from scipy.spatial import cKDTree
-from torch import Tensor
 from torch_geometric.data import Data
 
 
-def construct_pos_graphs(
+def construct_graph_lists(
     pos_individual: NDArray[np.number[Any]], num_neighbors: int
-) -> NDArray[np.number[Any]]:
+) -> tuple[NDArray[np.number[Any]], NDArray[np.number[Any]]]:
     tree = cKDTree(pos_individual)
     neighbors = tree.query(pos_individual, k=num_neighbors + 1)[1]
 
@@ -19,12 +18,12 @@ def construct_pos_graphs(
     pos_graph = pos_individual[neighbors]
     assert np.all(neighbors[:, 0] == np.arange(len(pos_individual)))
 
-    return cast(NDArray[np.number[Any]], pos_graph)
+    return neighbors, cast(NDArray[np.number[Any]], pos_graph)
 
 
 def angle_histogram_batched(
-    pos_graphs: Tensor, num_buckets: int, device: str
-) -> Tensor:
+    pos_graphs: torch.Tensor, num_buckets: int, device: torch.device
+) -> torch.Tensor:
     # Must be (B, N, 3) and have more than 2 atoms
     assert pos_graphs.dim() == 3 and pos_graphs.shape[1] > 2
     pos_graphs = pos_graphs.to(device)
@@ -67,7 +66,9 @@ def angle_histogram_batched(
     return hist.reshape(batches, num_atoms * num_atoms, num_buckets)[:, mask, :]
 
 
-def normalize_position_batch(pos_graphs: Tensor, edge_index_single: Tensor) -> Tensor:
+def normalize_position_batch(
+    pos_graphs: torch.Tensor, edge_index_single: torch.Tensor
+) -> torch.Tensor:
     diffs = (
         pos_graphs[:, edge_index_single[1], :] - pos_graphs[:, edge_index_single[0], :]
     )
@@ -77,10 +78,12 @@ def normalize_position_batch(pos_graphs: Tensor, edge_index_single: Tensor) -> T
     if torch.any(mean_edge_len == 0):
         raise ValueError("One of the graphs has zero mean edge length.")
 
-    return cast(Tensor, pos_graphs / mean_edge_len.unsqueeze(-1))
+    return cast(torch.Tensor, pos_graphs / mean_edge_len.unsqueeze(-1))
 
 
-def create_complete_graph_edges_single(num_nodes: int, device: str) -> Tensor:
+def create_complete_graph_edges_single(
+    num_nodes: int, device: torch.device
+) -> torch.Tensor:
     row = (
         torch.arange(0, num_nodes, device=device)
         .repeat_interleave(num_nodes - 1)
@@ -100,17 +103,17 @@ def create_complete_graph_edges_single(num_nodes: int, device: str) -> Tensor:
     return torch.stack([row, col])
 
 
-def create_center_mask_single(num_nodes: int, device: str) -> Tensor:
+def create_center_mask_single(num_nodes: int, device: torch.device) -> torch.Tensor:
     center_mask = torch.zeros(num_nodes, device=device).bool()
     center_mask[0] = True
     return center_mask
 
 
 def construct_batched_graph(
-    pos_graphs: Tensor,
-    label_ints: Tensor | None,
+    pos_graphs: torch.Tensor,
+    label_ints: torch.Tensor | None,
     num_buckets: int,
-    calc_device: str,
+    calc_device: torch.device,
 ) -> Data:
     pos_graphs = pos_graphs.to(calc_device)
     batches, num_nodes_single = pos_graphs.shape[0], pos_graphs.shape[1]
