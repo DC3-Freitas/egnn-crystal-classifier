@@ -6,18 +6,17 @@ from numpy.typing import NDArray
 
 
 def compute_coherence(
-    neighbors_np: NDArray[np.number[Any]],
+    neighbors_raw: NDArray[np.number[Any]],
     embeddings: torch.Tensor,
     batch_size: int,
     calc_device: torch.device,
 ) -> NDArray[np.floating[Any]]:
-    # important: neighbors for each atom is exclusive of the atom itself
-    neighbors_torch = torch.from_numpy(neighbors_np).long()
+    neighbors_exclude_torch = torch.from_numpy(neighbors_raw[:, 1:]).long()
     coh_fac = torch.zeros((embeddings.shape[0],))
 
     for start in range(0, embeddings.shape[0], batch_size):
         neighbor_embeddings = embeddings[
-            neighbors_torch[start : start + batch_size]
+            neighbors_exclude_torch[start : start + batch_size]
         ].to(calc_device)
         center_embeddings = (
             embeddings[start : start + batch_size].unsqueeze(1).to(calc_device)
@@ -29,7 +28,7 @@ def compute_coherence(
 
 
 def get_amorphous_mask(
-    neighbors_np: NDArray[np.number[Any]],
+    neighbors_raw: NDArray[np.number[Any]],
     embeddings: torch.Tensor,
     batch_size: int,
     calc_device: torch.device,
@@ -51,7 +50,7 @@ def get_amorphous_mask(
     """
 
     embedding_similarity = compute_coherence(
-        neighbors_np, embeddings, batch_size, calc_device
+        neighbors_raw, embeddings, batch_size, calc_device
     )
 
     if cutoff is None:
