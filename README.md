@@ -1,6 +1,7 @@
 # e3gnn-crystal-classifier
 ![image](https://github.com/user-attachments/assets/890dc8bb-6e30-4a09-a014-171f26ee5136)
-E(3)-equivariant graph neural network for crystal structure prediction.
+
+E(3)-equivariant graph neural network for crystal structure prediction. Our model achieves state-of-the-art performance especially at high temperatures (T≈T_m), and runs up to 10x faster than previous data-driven methods. It is trained on a synthetic dataset, eliminating the need for large datasets of real-world structures. By default, it can classify six types of crystal structures: BCC, FCC, HCP, simple cubic, hexagonal diamond, and diamond cubic. 
 
 ## Usage
 If installed in OVITO, `DC4 Classification` will appear in the Python subsection of the Modifiers panel. The module can also be used directly in a standard Python environment:
