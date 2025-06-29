@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 
+
 def get_outlier_mask(
     embeddings: torch.Tensor,
     predictions: NDArray[np.number[Any]],
@@ -27,4 +28,7 @@ def get_outlier_mask(
         NDArray[np.bool_]: Boolean array indicating whether each atom is an outlier (True) or not (False).
     """
 
-    return torch.norm(embeddings - ref_embeddings[predictions]) > delta_cutoffs[predictions]
+    return (
+        torch.norm(embeddings - ref_embeddings[predictions])
+        > delta_cutoffs[predictions]
+    )

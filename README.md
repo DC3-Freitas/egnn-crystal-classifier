@@ -41,7 +41,7 @@ train(
 ```
 
 ## Installation
-OVITO Pro Integrated Python Interpreter
+OVITO Pro Integrated Python Interpreter (tested with OVITO 3.12.2)
 ```bash
 ovitos -m pip install --user https://github.com/DC3-Freitas/egnn-crystal-classifier/archive/refs/heads/main.zip --find-links https://data.pyg.org/whl/torch-2.7.0+cu126.html --extra-index-url https://download.pytorch.org/whl/cu126 --prefer-binary --only-binary=:all:
 ```
