@@ -30,10 +30,11 @@ def get_outlier_mask(
 
     return (
         (
-            torch.norm(
-                embeddings - ref_embeddings[predictions]
-            )  # alex: should add dim=1 ??
-            > delta_cutoffs[predictions]
+            # torch.norm(
+            #     embeddings - ref_embeddings[predictions]
+            # )  # alex: should add dim=1 ??
+            (embeddings * ref_embeddings[predictions]).sum(dim=1).abs()
+            < delta_cutoffs[predictions]
         )
         .cpu()
         .numpy()

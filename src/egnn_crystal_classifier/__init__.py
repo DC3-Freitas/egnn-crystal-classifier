@@ -19,9 +19,7 @@ class DC4Modifier(ModifierInterface):
 
     model_info = Any()
     run = Bool(False, help="Click to start model processing.")
-    run_amorphous_outlier = Bool(
-        True, help="Run amorphous and outlier detection"
-    )
+    run_amorphous_outlier = Bool(True, help="Run amorphous and outlier detection")
     coherence_cutoff = Any(help="Coherence cutoff for amorphous structure detection.")
 
     def __init__(self, **kwargs):

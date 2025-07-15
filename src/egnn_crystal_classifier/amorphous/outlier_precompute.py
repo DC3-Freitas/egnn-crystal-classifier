@@ -57,8 +57,8 @@ def compute_perfect_embeddings(
         for graphs in loader:
             graphs = graphs.to(calc_device)
             _, embeddings = model(graphs)
-            embeddings_avg += embeddings.mean(dim=0)
-    embeddings_avg /= len(loader)
+            embeddings_avg += embeddings.sum(dim=0)
+    embeddings_avg /= len(loader) * batch_size
     return embeddings_avg
 
 
@@ -109,14 +109,15 @@ def compute_delta_cutoffs(
             for j in range(embeddings.shape[0]):
                 class_label_num = class_label_nums[j]
                 distances[class_label_num].append(
-                    torch.norm(
-                        embeddings[j] - perfect_embeddings[class_label_num]
-                    ).item()
+                    (embeddings[j] * perfect_embeddings[class_label_num])
+                    .sum()
+                    .abs()
+                    .item()
                 )
     delta_cutoffs = np.zeros(len(perfect_embeddings))
     for i, dist_list in enumerate(distances):
         if len(dist_list) > 0:
-            delta_cutoffs[i] = np.percentile(np.array(dist_list), 99)
+            delta_cutoffs[i] = np.percentile(np.array(dist_list), 1)
         else:
             delta_cutoffs[i] = 0.0
     return delta_cutoffs
