@@ -9,16 +9,48 @@ from torch_geometric.data import Data
 
 
 def construct_graph_lists(
-    pos_individual: NDArray[np.number[Any]], num_neighbors: int
+    pos_individual: NDArray[np.number[Any]], num_neighbors: int, cell: NDArray[np.number] | None = None
 ) -> tuple[NDArray[np.number[Any]], NDArray[np.number[Any]]]:
-    tree = cKDTree(pos_individual)
+    pos_individual = np.asarray(pos_individual, dtype=np.float32)
+    if pos_individual.ndim != 2 or pos_individual.shape[1] != 3:
+        raise ValueError("pos_individual must be a 2D array with shape (N, 3)")
+    
+    if cell is not None:
+        boxsize = np.max(cell[:, :3], axis=1)
+        pos_individual -= cell[:, 3]
+        pos_individual %= boxsize
+        print("Constructing graph with boxsize:", boxsize)
+
+        # Uncomment the following lines if the simulation box size is not known
+        # nn_tree = cKDTree(pos_individual)
+        # nearest_neighbors = nn_tree.query(pos_individual, k=2)[1]
+        # nn_dist_vect = np.abs(pos_individual[nearest_neighbors[:, 1]] - pos_individual)
+        # avg_nn_dist = np.mean(nn_dist_vect, axis=0)
+        # max_atom = np.max(pos_individual, axis=0) + avg_nn_dist / 2
+        # min_atom = np.min(pos_individual, axis=0) - avg_nn_dist / 2
+        # boxsize = max_atom - min_atom
+        # print("Constructing graph with boxsize:", boxsize)
+        # pos_individual -= min_atom
+
+        tree = cKDTree(pos_individual, boxsize=boxsize)
+    else:
+        tree = cKDTree(pos_individual)
     neighbors = tree.query(pos_individual, k=num_neighbors + 1)[1]
 
     # Each data entry will store all nearest neighbor positions with the first one being the central atom
     pos_graph = pos_individual[neighbors]
+    pos_graph = cast(NDArray[np.number[Any]], pos_graph)
+    
+    # apply pbc
+    if cell is not None:
+        for group in pos_graph:
+            anchor = group[0]
+            group -= anchor
+            pbc_fact = boxsize * np.round(group / boxsize)
+            group -= pbc_fact
     assert np.all(neighbors[:, 0] == np.arange(len(pos_individual)))
 
-    return neighbors, cast(NDArray[np.number[Any]], pos_graph)
+    return neighbors, pos_graph
 
 
 def angle_histogram_batched(

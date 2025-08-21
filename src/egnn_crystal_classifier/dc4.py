@@ -104,6 +104,7 @@ class DC4:
         neighbors, pos_graphs = construct_graph_lists(
             pos_individual=data.particles.positions,
             num_neighbors=self.hparams.num_neighbors,
+            cell=data.cell[...]
         )
         dataset = CrystalDataset(
             pos_graphs=pos_graphs,
