@@ -3,6 +3,7 @@ OVITO modifier for crystal structure classification using the DC4 model.
 """
 
 from egnn_crystal_classifier.dc4 import DC4
+from egnn_crystal_classifier.dc4_liquid import DC4Liquid
 from egnn_crystal_classifier.ml_train.hparams import HParams
 from ovito.data import DataCollection
 from ovito.pipeline import ModifierInterface
@@ -19,7 +20,10 @@ class DC4Modifier(ModifierInterface):
 
     model_info = Any()
     run = Bool(False, help="Click to start model processing.")
-    run_amorphous_outlier = Bool(True, help="Run amorphous and outlier detection")
+    # run_amorphous_outlier = Bool(True, help="Run amorphous and outlier detection")
+    display_probability = Bool(
+        False, help="Display prediction probabilities instead of class labels."
+    )
     coherence_cutoff = Any(help="Coherence cutoff for amorphous structure detection.")
 
     def __init__(self, **kwargs):
@@ -50,9 +54,10 @@ class DC4Modifier(ModifierInterface):
                 run_amorphous=self.run_amorphous_outlier,
             )
         else:
-            self.model = DC4(
-                coherence_cutoff=self.coherence_cutoff,
-                run_amorphous=self.run_amorphous_outlier,
-            )
-        outputs = self.model.calculate(data)
+            # self.model = DC4(
+            #     coherence_cutoff=self.coherence_cutoff,
+            #     run_amorphous=self.run_amorphous_outlier,
+            # )
+            self.model = DC4Liquid()
+        outputs = self.model.calculate(data, return_probabilities=self.display_probability)
         data.particles_.create_property("Particle Type", data=outputs)

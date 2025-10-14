@@ -37,7 +37,7 @@ EXP_TO_CLASSIFIERS = {
     "ge_cd": ["DC4", "DC3", "Common Neighbor Analysis (Diamond)", "Chill+"],
 }
 
-dc4_model = DC4()
+dc4_model = DC4(run_amorphous=False)
 dc3_model = create_dc3_model(None)
 
 

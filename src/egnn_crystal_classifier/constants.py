@@ -13,6 +13,10 @@ CHECKERBOARD_CELL_COUNT = 3
 MODEL_PATH = os.path.join(BASE_DIR, "ml_model", "model_best.pth")
 LABEL_MAP_PATH = os.path.join(BASE_DIR, "ml_model", "label_map.json")
 
+# LIQUID INFERENCE
+LIQUID_MODEL_PATH = os.path.join(BASE_DIR, "ml_model", "liquid_model.pth")
+LIQUID_LABEL_MAP_PATH = os.path.join(BASE_DIR, "ml_model", "liquid_label_map.json")
+
 # OUTLIER DETECTION
 PERFECT_LATTICES_PATH = os.path.join(BASE_DIR, "amorphous", "perfect_lattices")
 PERFECT_EMBEDDINGS_PATH = os.path.join(BASE_DIR, "amorphous", "perfect_embeddings.npy")

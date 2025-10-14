@@ -1,0 +1,21 @@
+LiquidTrainingHParams(num_neighbors=16, num_buckets=24, num_hidden=64, num_reg_layers=2, num_classes=2, dropout_prob=0.05, train_split_frac=0.8, train_eval_sample_frac=0.25, batch_size=512, epochs=20, lr=0.008, label_smoothing=0.1)
+Epoch 001: Train Loss = 0.6102, Test Loss = 0.4706, Train Acc = 0.8203, Test Acc = 0.8186
+Epoch 002: Train Loss = 0.4647, Test Loss = 0.4495, Train Acc = 0.8340, Test Acc = 0.8331
+Epoch 003: Train Loss = 0.4488, Test Loss = 0.4317, Train Acc = 0.8474, Test Acc = 0.8458
+Epoch 004: Train Loss = 0.4383, Test Loss = 0.4277, Train Acc = 0.8500, Test Acc = 0.8476
+Epoch 005: Train Loss = 0.4285, Test Loss = 0.4309, Train Acc = 0.8596, Test Acc = 0.8557
+Epoch 006: Train Loss = 0.4246, Test Loss = 0.4154, Train Acc = 0.8579, Test Acc = 0.8580
+Epoch 007: Train Loss = 0.4163, Test Loss = 0.4053, Train Acc = 0.8658, Test Acc = 0.8633
+Epoch 008: Train Loss = 0.4123, Test Loss = 0.4284, Train Acc = 0.8527, Test Acc = 0.8522
+Epoch 009: Train Loss = 0.4112, Test Loss = 0.4035, Train Acc = 0.8677, Test Acc = 0.8643
+Epoch 010: Train Loss = 0.4076, Test Loss = 0.4024, Train Acc = 0.8648, Test Acc = 0.8650
+Epoch 011: Train Loss = 0.4047, Test Loss = 0.4008, Train Acc = 0.8686, Test Acc = 0.8680
+Epoch 012: Train Loss = 0.4035, Test Loss = 0.3993, Train Acc = 0.8683, Test Acc = 0.8691
+Epoch 013: Train Loss = 0.4006, Test Loss = 0.4041, Train Acc = 0.8634, Test Acc = 0.8644
+Epoch 014: Train Loss = 0.3964, Test Loss = 0.3885, Train Acc = 0.8738, Test Acc = 0.8750
+Epoch 015: Train Loss = 0.3933, Test Loss = 0.3887, Train Acc = 0.8734, Test Acc = 0.8745
+Epoch 016: Train Loss = 0.3939, Test Loss = 0.3868, Train Acc = 0.8744, Test Acc = 0.8753
+Epoch 017: Train Loss = 0.3908, Test Loss = 0.3870, Train Acc = 0.8732, Test Acc = 0.8755
+Epoch 018: Train Loss = 0.3893, Test Loss = 0.3843, Train Acc = 0.8752, Test Acc = 0.8781
+Epoch 019: Train Loss = 0.3884, Test Loss = 0.3847, Train Acc = 0.8750, Test Acc = 0.8764
+Epoch 020: Train Loss = 0.3878, Test Loss = 0.3837, Train Acc = 0.8756, Test Acc = 0.8778

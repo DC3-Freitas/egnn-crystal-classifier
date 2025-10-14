@@ -106,7 +106,7 @@ def create_checker_structures():
     return x_data, y_data
 
 
-def gen(use_checker: bool = True):
+def gen(use_checker: bool = True, max_temp: float = float("inf"), min_temp: float = 0.0):
     # Extract data
     x_data = []
     y_data = []
@@ -115,6 +115,11 @@ def gen(use_checker: bool = True):
 
     for structure in os.listdir(SYNTH_DATA_PATH):
         for f in os.listdir(os.path.join(SYNTH_DATA_PATH, structure)):
+            temp = float(f[:-3])
+            if temp > max_temp:
+                continue
+            if temp < min_temp:
+                continue
             pipeline = import_file(os.path.join(SYNTH_DATA_PATH, structure, f))
             lattice = pipeline.compute()
             all_positions = np.copy(lattice.particles.positions)
