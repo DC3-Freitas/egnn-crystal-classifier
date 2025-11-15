@@ -196,7 +196,18 @@ def train(
         hp.dropout_prob,
     ).to(device)
 
-    criterion = CrossEntropyLoss(label_smoothing=hp.label_smoothing)
+    # reweighting to handle class imbalance
+    # label_counts = np.zeros(hp.num_classes, dtype=np.int64)
+    # for data in train_loader:
+    #     for label in data.y.cpu().numpy():
+    #         label_counts[label] += 1
+    # class_weights = 1.0 / (label_counts + 1e-6)
+    # class_weights = class_weights / class_weights.sum() * hp.num_classes
+    class_weights = [0.2, 0.4, 0.4]
+    print(f"Using class weights: {class_weights}")
+    class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+
+    criterion = CrossEntropyLoss(label_smoothing=hp.label_smoothing, weight=class_weights)
     optimizer = AdamW(model.parameters(), lr=hp.lr)
     scheduler = CosineAnnealingLR(optimizer, T_max=hp.epochs)
 

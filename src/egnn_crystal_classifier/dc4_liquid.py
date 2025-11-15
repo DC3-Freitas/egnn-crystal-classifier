@@ -18,6 +18,7 @@ from egnn_crystal_classifier.data_prep.graph_construction import (
 )
 from egnn_crystal_classifier.ml_model.model import EGNN
 from egnn_crystal_classifier.ml_train.hparams import HParams
+from scipy.spatial import cKDTree
 
 
 class LiquidTrainingHParams(HParams):
@@ -160,6 +161,17 @@ class DC4Liquid:
         
         # Get predictions
         predictions = output.argmax(dim=1).cpu().numpy()
+        # smoothing
+        N_SAME = 4
+        N_NEIGH = 12
+        tree = cKDTree(data.particles.positions)
+        for idx in range(len(predictions)):
+            _, indices = tree.query(data.particles.positions[idx], k=N_NEIGH+1)
+            neighbor_preds = predictions[indices[1:]]  # exclude self
+            if np.sum(neighbor_preds == predictions[idx]) < N_SAME:
+                # flip prediction if majority of neighbors disagree
+                predictions[idx] = 1 - predictions[idx]
+
         # predictions = probabilities[:, 1] * 100
         
         # Apply confidence threshold - mark low-confidence predictions as uncertain

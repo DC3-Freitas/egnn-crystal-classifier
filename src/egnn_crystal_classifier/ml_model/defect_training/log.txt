@@ -1,0 +1,21 @@
+HParams(num_neighbors=16, num_buckets=24, num_hidden=64, num_reg_layers=2, num_classes=3, dropout_prob=0.05, train_split_frac=0.8, train_eval_sample_frac=0.25, batch_size=512, epochs=20, lr=0.001, label_smoothing=0.1)
+Epoch 001: Train Loss = 0.7653, Test Loss = 0.7165, Train Acc = 0.8625, Test Acc = 0.8646
+Epoch 002: Train Loss = 0.7022, Test Loss = 0.6823, Train Acc = 0.8592, Test Acc = 0.8617
+Epoch 003: Train Loss = 0.6812, Test Loss = 0.6681, Train Acc = 0.8706, Test Acc = 0.8716
+Epoch 004: Train Loss = 0.6705, Test Loss = 0.6619, Train Acc = 0.8694, Test Acc = 0.8714
+Epoch 005: Train Loss = 0.6646, Test Loss = 0.6562, Train Acc = 0.8871, Test Acc = 0.8876
+Epoch 006: Train Loss = 0.6606, Test Loss = 0.6533, Train Acc = 0.8874, Test Acc = 0.8879
+Epoch 007: Train Loss = 0.6579, Test Loss = 0.6518, Train Acc = 0.8887, Test Acc = 0.8889
+Epoch 008: Train Loss = 0.6559, Test Loss = 0.6532, Train Acc = 0.8841, Test Acc = 0.8840
+Epoch 009: Train Loss = 0.6540, Test Loss = 0.6493, Train Acc = 0.8901, Test Acc = 0.8904
+Epoch 010: Train Loss = 0.6525, Test Loss = 0.6478, Train Acc = 0.8870, Test Acc = 0.8872
+Epoch 011: Train Loss = 0.6516, Test Loss = 0.6473, Train Acc = 0.8839, Test Acc = 0.8836
+Epoch 012: Train Loss = 0.6503, Test Loss = 0.6472, Train Acc = 0.8918, Test Acc = 0.8921
+Epoch 013: Train Loss = 0.6495, Test Loss = 0.6463, Train Acc = 0.8890, Test Acc = 0.8894
+Epoch 014: Train Loss = 0.6488, Test Loss = 0.6456, Train Acc = 0.8874, Test Acc = 0.8876
+Epoch 015: Train Loss = 0.6479, Test Loss = 0.6456, Train Acc = 0.8888, Test Acc = 0.8885
+Epoch 016: Train Loss = 0.6473, Test Loss = 0.6448, Train Acc = 0.8906, Test Acc = 0.8903
+Epoch 017: Train Loss = 0.6468, Test Loss = 0.6447, Train Acc = 0.8915, Test Acc = 0.8912
+Epoch 018: Train Loss = 0.6464, Test Loss = 0.6444, Train Acc = 0.8918, Test Acc = 0.8916
+Epoch 019: Train Loss = 0.6462, Test Loss = 0.6441, Train Acc = 0.8911, Test Acc = 0.8910
+Epoch 020: Train Loss = 0.6460, Test Loss = 0.6441, Train Acc = 0.8908, Test Acc = 0.8906

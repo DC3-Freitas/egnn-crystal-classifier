@@ -4,10 +4,11 @@ OVITO modifier for crystal structure classification using the DC4 model.
 
 from egnn_crystal_classifier.dc4 import DC4
 from egnn_crystal_classifier.dc4_liquid import DC4Liquid
+from egnn_crystal_classifier.dc4_defect import DC4Defect
 from egnn_crystal_classifier.ml_train.hparams import HParams
 from ovito.data import DataCollection
 from ovito.pipeline import ModifierInterface
-from traits.api import Any, Bool, Float
+from traits.api import Any, Bool, Float, Enum
 
 
 class DC4Modifier(ModifierInterface):
@@ -26,8 +27,14 @@ class DC4Modifier(ModifierInterface):
     )
     coherence_cutoff = Any(help="Coherence cutoff for amorphous structure detection.")
 
+    model_select = Enum(
+        "default", "liquid", "defect", help="Select which pretrained model to use."
+    )
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.model = None
+        self.model_setup = None
 
     def modify(self, data: DataCollection, frame: int, **kwargs) -> None:
         """
@@ -47,17 +54,23 @@ class DC4Modifier(ModifierInterface):
         assert isinstance(
             self.coherence_cutoff, (float, type(None))
         ), "Coherence cutoff must be a float or None."
-        if isinstance(self.model_info, str):
-            self.model = DC4(
-                model_path=self.model_info,
-                coherence_cutoff=self.coherence_cutoff,
-                run_amorphous=self.run_amorphous_outlier,
-            )
-        else:
-            # self.model = DC4(
-            #     coherence_cutoff=self.coherence_cutoff,
-            #     run_amorphous=self.run_amorphous_outlier,
-            # )
-            self.model = DC4Liquid()
+        if self.model is None or self.model_setup != (self.model_info, self.coherence_cutoff):
+            self.model_setup = (self.model_info, self.coherence_cutoff)
+            if isinstance(self.model_info, str):
+                self.model = DC4(
+                    model_path=self.model_info,
+                    coherence_cutoff=self.coherence_cutoff,
+                    run_amorphous=self.run_amorphous_outlier,
+                )
+            else:
+                if self.model_select == "default":
+                    self.model = DC4(
+                        coherence_cutoff=self.coherence_cutoff,
+                        run_amorphous=self.run_amorphous_outlier,
+                    )
+                elif self.model_select == "liquid":
+                    self.model = DC4Liquid()
+                elif self.model_select == "defect":
+                    self.model = DC4Defect()
         outputs = self.model.calculate(data, return_probabilities=self.display_probability)
         data.particles_.create_property("Particle Type", data=outputs)
