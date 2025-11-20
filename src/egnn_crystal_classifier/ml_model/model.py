@@ -13,7 +13,7 @@ class ConvLayer(MessagePassing):
         hidden_and_output: int,
         dropout_prob: float,
     ) -> None:
-        super().__init__(aggr="mean")
+        super().__init__(aggr="sum")
 
         self.edge_mlp = nn.Sequential(
             nn.Linear(input_size + input_size + 1 + num_buckets, hidden_and_output),
@@ -61,7 +61,7 @@ class ConvLayer(MessagePassing):
         edge_out = edge_out * gate
 
         # Propagate (for edge i,j it'll set look at m[i,j])
-        node_accum = self.propagate(edge_index, m=edge_out)
+        node_accum = self.propagate(edge_index, m=edge_out) / deg.sqrt()[:, None]
 
         # Run MLP on all nodes at once
         node_out = self.node_mlp(torch.cat([h, node_accum], dim=1))

@@ -117,9 +117,18 @@ class DC4LiquidInterpolated:
         N_SAME = 8
         N_NEIGH = 16
         tree = cKDTree(data.particles.positions)
+        transients = []
         for idx in range(len(preds)):
             _, indices = tree.query(data.particles.positions[idx], k=N_NEIGH + 1)
             neighbor_preds = preds[indices[1:]]
+            if np.sum(neighbor_preds == preds[idx]) < N_SAME:
+                transients.append(1 - preds[idx])
+            else:
+                transients.append(preds[idx])
+        transients = np.array(transients)
+        for idx in range(len(preds)):
+            _, indices = tree.query(data.particles.positions[idx], k=N_NEIGH + 1)
+            neighbor_preds = transients[indices[1:]]
             if np.sum(neighbor_preds == preds[idx]) < N_SAME:
                 preds[idx] = 1 - preds[idx]
 
