@@ -1,144 +1,192 @@
+"""
+The entire NequIP-style model for structural classification and
+local structure descriptors.
+"""
+
 import torch
 import torch.nn as nn
+from e3nn.nn import Gate
+from e3nn.o3 import FullyConnectedTensorProduct, Irrep, Irreps, spherical_harmonics
 from torch_geometric.data import Data
-from torch_geometric.nn import MessagePassing
-from torch_scatter import scatter
+from torch_geometric.utils import scatter
+
+from egnn_crystal_classifier.config import Config
+from egnn_crystal_classifier.ml_model.edge_embed import bessel
+from egnn_crystal_classifier.ml_model.interaction import InteractionCore
 
 
-class ConvLayer(MessagePassing):
+class NequIP(nn.Module):
+    """
+    Equivariant GNN for local structural classification and
+    invariant representation based on the NequIP architecture.
+
+    Follows the structure:
+    1) Embedding matrix lookup for initial and frozen embeddings.
+    2) Many equivariant interaction layers.
+    3) Combining embeddings to form graph-level descriptors (weighted tensor
+       product between center node embeddings and mean-pooled graph
+       embeddings).
+    4) L2-normalization of the invariant descriptor for each graph. This
+       serves as our graph-level invariant embedding.
+    5) A final linear classification head.
+
+    The implementaiton assumes all irreps have even parity.
+    """
+
     def __init__(
         self,
-        num_buckets: int,
-        input_size: int,
-        hidden_and_output: int,
-        dropout_prob: float,
+        config: Config,
     ) -> None:
-        super().__init__(aggr="mean")
+        """
+        Initializes all parts of the model.
 
-        self.edge_mlp = nn.Sequential(
-            nn.Linear(input_size + input_size + 1 + num_buckets, hidden_and_output),
-            nn.SiLU(),
-            nn.Dropout(p=dropout_prob),
-        )
-        self.coord_mlp = nn.Sequential(
-            nn.Linear(hidden_and_output, 1),
-            nn.Identity(),
-        )
-
-        self.gate = nn.Linear(hidden_and_output, 1)
-
-        self.node_mlp = nn.Sequential(
-            nn.Linear(input_size + hidden_and_output, hidden_and_output),
-            nn.SiLU(),
-            nn.Dropout(p=dropout_prob),
-            nn.Linear(hidden_and_output, hidden_and_output),
-            nn.SiLU(),
-            nn.Dropout(p=dropout_prob),
-        )
-
-    def forward(
-        self,
-        h: torch.Tensor,
-        x: torch.Tensor,
-        edge_index: torch.Tensor,
-        edge_angle_hist: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Prepare
-        row, col = edge_index
-        deg = scatter(torch.ones_like(row), row, dim=0, dim_size=x.size(0))
-        deg = deg.to(x.dtype).clamp_min(1.0)
-
-        edge_vec = x[col] - x[row]
-
-        # Extract distance and angle histograms across every edge and combine to form desired vector for each edge
-        edge_dists = edge_vec.norm(p=2, dim=1, keepdim=True)
-
-        edge_info = torch.cat([h[row], h[col], edge_dists, edge_angle_hist], dim=1)
-        edge_out = self.edge_mlp(edge_info)
-
-        # Weight each edge
-        gate = torch.sigmoid(self.gate(edge_out))
-        edge_out = edge_out * gate
-
-        # Propagate (for edge i,j it'll set look at m[i,j])
-        node_accum = self.propagate(edge_index, m=edge_out)
-
-        # Run MLP on all nodes at once
-        node_out = self.node_mlp(torch.cat([h, node_accum], dim=1))
-
-        # Update positional embeddings
-        weight = self.coord_mlp(edge_out)
-        pos_message = edge_vec * weight
-
-        delta = scatter(pos_message, col, dim=0, dim_size=x.size(0))
-        x_new = x + delta / deg[:, None]
-
-        return node_out, x_new
-
-    def message(self, m: torch.Tensor) -> torch.Tensor:
-        return m
-
-
-class EGNN(nn.Module):
-    def __init__(
-        self,
-        num_buckets: int,
-        hidden: int,
-        num_reg_layers: int,
-        num_classes: int,
-        dropout_prob: float,
-    ) -> None:
+        Args:
+            config: Includes all information necessary to construct the model.
+                    See Config class for more details.
+        """
         super().__init__()
-        self.dropout_prob = dropout_prob
 
-        self.firstLayer = ConvLayer(num_buckets, 0, hidden, self.dropout_prob)
+        # Requires even irreps
+        for _, ir in config.irreps_hidden + config.irreps_edge_sph:
+            assert ir.p == 1, "we assume that all irreps are even"
 
-        self.otherLayers = nn.ModuleList(
-            ConvLayer(num_buckets, hidden, hidden, self.dropout_prob)
-            for _ in range(num_reg_layers)
+        self.config = config
+
+        # Embedding
+        self.embedding_frozen = nn.Embedding(
+            config.num_species, config.node_embedding_frozen
         )
-        self.norms = nn.ModuleList(
-            [nn.LayerNorm(hidden) for _ in range(num_reg_layers)]
+        self.embedding_init = nn.Embedding(
+            config.num_species, config.node_embedding_init
         )
-        self.final_norm = nn.LayerNorm(hidden)
 
-        # Don't add any activation at the end since we use CrossEntropyLoss
-        self.classifier_mlp = nn.Sequential(
-            nn.Linear(hidden, hidden),
-            nn.SiLU(),
-            nn.Dropout(p=dropout_prob),
-            nn.Linear(hidden, hidden),
-            nn.SiLU(),
-            nn.Dropout(p=dropout_prob),
-            nn.Linear(hidden, num_classes),
+        # Initialize layers
+        self.layers_core = nn.ModuleList()
+        self.layers_gate = nn.ModuleList()
+
+        for i in range(config.num_convs):
+            # The following is simplified from the original NequIP and denoiser implementations
+            # and is based on the assumption that all Irreps are even.
+            scalars = 0
+            gate_count = 0
+            gated: list[tuple[int, Irrep]] = []
+
+            for mul, ir in config.irreps_hidden:
+                if ir.l == 0:
+                    scalars += mul
+                else:
+                    gate_count += mul
+                    gated.append((mul, ir))
+
+            gate = Gate(
+                irreps_scalars=f"{scalars}x0e",
+                act_scalars=[nn.SiLU()],
+                irreps_gates=f"{gate_count}x0e",
+                act_gates=[nn.Sigmoid()],
+                irreps_gated=Irreps(gated),
+            )
+            assert (
+                gate.irreps_out == config.irreps_hidden
+            ), "output of gate should be hidden"
+
+            self.layers_core.append(
+                InteractionCore(
+                    irreps_in=(
+                        Irreps(f"{config.node_embedding_init}x0e")
+                        if i == 0
+                        else config.irreps_hidden
+                    ),
+                    irreps_out=gate.irreps_in,
+                    irreps_node_frozen=Irreps(f"{config.node_embedding_frozen}x0e"),
+                    irreps_edge_sph=config.irreps_edge_sph,
+                    edge_dist_n=config.edge_dist_n,
+                    radial_hidden=config.radial_hidden,
+                )
+            )
+            self.layers_gate.append(gate)
+
+        assert len(self.layers_core) == len(self.layers_gate) == config.num_convs
+
+        self.to_inv_embedding = FullyConnectedTensorProduct(
+            irreps_in1=config.irreps_hidden,
+            irreps_in2=config.irreps_hidden,
+            irreps_out=f"{config.invariant_embedding_size}x0e",
+        )
+        self.pre_head_act = nn.SiLU()
+        self.head = nn.Linear(
+            in_features=config.invariant_embedding_size,
+            out_features=config.output_classes,
         )
 
     def forward(self, data: Data) -> tuple[torch.Tensor, torch.Tensor]:
-        pos_norm, edge_index, edge_angle_hist, center_mask = (
-            data.pos_norm,
-            data.edge_index,
-            data.edge_angle_hist,
-            data.center_mask,
+        """
+        Performs the entire model pipeline for structural classification.
+
+        Args:
+            data: PyGeometric data object containing batched graph information.
+                  Must be batched and consist of the following fields:
+                  x, pos, edge_index, center_mask, batch, y
+                  See construct_batched_graph for more details.
+
+        Returns:
+            logits (B, output_classes): Logits for each graph for classificaiton.
+            inv_embeddings (B, invariant_embedding_size): Normalized (L2) invariant embedding
+                                                          for each graph.
+        """
+        # Node and edge dropout
+        if self.training:
+            non_center = ~data.center_mask
+            drop_node_mask = (
+                torch.rand(non_center.shape[-1], device=data.x.device)
+                < self.config.node_dropout
+            ) & non_center
+            data = data.subgraph(~drop_node_mask)
+
+            drop_edge_mask = (
+                torch.rand(data.edge_index.shape[-1], device=data.x.device)
+                < self.config.edge_dropout
+            )
+            data.edge_index = data.edge_index[:, ~drop_edge_mask]
+
+        # We let data.x just be the species
+        node_emb = self.embedding_init(data.x)
+        frozen_emb = self.embedding_frozen(data.x)
+
+        # Prepare edge info
+        row, col = data.edge_index
+
+        # In message passing, we pass along j --> i yet vectors should be relative
+        # to central atom i so we need to use vector corresponding to i --> j which
+        # is why we invert by subtracting the target from the source.
+        edge_vecs = data.pos[row] - data.pos[col]
+        edge_dists = edge_vecs.norm(dim=-1, keepdim=True)
+
+        edge_sph = spherical_harmonics(
+            l=self.config.irreps_edge_sph,
+            x=edge_vecs,
+            normalize=True,
+            normalization="component",
+        )
+        edge_emb = bessel(edge_dists, self.config.edge_dist_n, self.config.r_c)
+
+        # Go through layers
+        for core, gate in zip(self.layers_core, self.layers_gate):
+            node_emb = core(node_emb, frozen_emb, data.edge_index, edge_sph, edge_emb)
+            node_emb = gate(node_emb)
+
+        # Obtain final invariant embeddings
+        final_eq_embeddings = node_emb[data.center_mask]
+        average_eq_embeddings_per_graph = scatter(
+            node_emb, data.batch, dim=0, reduce="mean"
         )
 
-        # Note that no initial node features will be provided
-        h = torch.empty(
-            (pos_norm.shape[0], 0), dtype=pos_norm.dtype, device=pos_norm.device
+        inv_embeddings = self.to_inv_embedding(
+            final_eq_embeddings, average_eq_embeddings_per_graph
         )
-        x = pos_norm
 
-        h, x = self.firstLayer(h, x, edge_index, edge_angle_hist)
+        # Normalize invariant embeddings so that it lives on hypersphere
+        inv_embeddings = inv_embeddings / (
+            inv_embeddings.norm(dim=-1, keepdim=True) + 1e-8
+        )
 
-        # Run rest of layers
-        for layer, norm in zip(self.otherLayers, self.norms):
-            h_res = h
-
-            # Run layer and prenormalize
-            h, x = layer(norm(h), x, edge_index, edge_angle_hist)
-
-            # Residual connection
-            h = h + h_res
-
-        # Run it through final MLP to get classification (assuming center_mask contains one center per graph)
-        embeddings = self.final_norm(h[center_mask])
-        return self.classifier_mlp(embeddings), embeddings
+        return self.head(self.pre_head_act(inv_embeddings)), inv_embeddings
