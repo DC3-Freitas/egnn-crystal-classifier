@@ -1,92 +1,52 @@
-import json
+"""
+All training utilities and pipeline for training the model.
+"""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
-from modal import Volume
 from torch.nn import CrossEntropyLoss
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from tqdm import tqdm
 
-from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
-from egnn_crystal_classifier.ml_model.model import EGNN
-from egnn_crystal_classifier.ml_train.hparams import HParams
-
-
-def get_loaders(
-    coord_path: Path,
-    label_path: Path,
-    label_map_path: Path,
-    device: torch.device,
-    hp: HParams,
-) -> tuple[FastLoader, FastLoader, FastLoader]:
-    # Load data and do some quick checks
-    pos_graphs = np.load(coord_path)
-    with label_path.open("r", encoding="utf-8") as f:
-        label_strs = json.load(f)
-    with label_map_path.open("r", encoding="utf-8") as f:
-        label_map = json.load(f)
-
-    assert pos_graphs.shape[0] == len(
-        label_strs
-    ), "lengths of pos_graphs and label_strs must be the same"
-    assert set(label_strs) == set(
-        label_map
-    ), "label_strs must be consistent with label_map"
-
-    # Prep data
-    num_data_points = pos_graphs.shape[0]
-    train_section = int(hp.train_split_frac * num_data_points)
-    train_eval_size = int(hp.train_eval_sample_frac * train_section)
-
-    use_indices = np.random.permutation(num_data_points)
-
-    # Indices for dataset
-    train_indices = use_indices[0:train_section]
-    train_eval_indices = np.random.choice(
-        train_indices, size=train_eval_size, replace=False
-    )
-    test_indices = use_indices[train_section:num_data_points]
-
-    # Datasets
-    train_dataset = CrystalDataset(
-        pos_graphs[train_indices], [label_strs[i] for i in train_indices], label_map
-    )
-    train_eval_dataset = CrystalDataset(
-        pos_graphs[train_eval_indices],
-        [label_strs[i] for i in train_eval_indices],
-        label_map,
-    )
-    test_dataset = CrystalDataset(
-        pos_graphs[test_indices], [label_strs[i] for i in test_indices], label_map
-    )
-
-    # Dataloaders
-    train_loader = FastLoader(
-        train_dataset, hp.batch_size, hp.num_buckets, device, shuffle=True
-    )
-    train_eval_loader = FastLoader(
-        train_eval_dataset, hp.batch_size, hp.num_buckets, device, shuffle=False
-    )
-    test_loader = FastLoader(
-        test_dataset, hp.batch_size, hp.num_buckets, device, shuffle=False
-    )
-    return train_loader, train_eval_loader, test_loader
+from egnn_crystal_classifier.config import Config
+from egnn_crystal_classifier.data_prep.data_handler import FastLoader
+from egnn_crystal_classifier.ml_model.model import NequIP
+from egnn_crystal_classifier.utils import set_seed
 
 
 def train_epoch(
-    model: EGNN,
+    model: NequIP,
     loader: FastLoader,
     criterion: CrossEntropyLoss,
     optimizer: AdamW,
 ) -> tuple[float, float]:
+    """
+    Runs a single epoch through the data loader and reports loss and
+    accuracy on train mode.
+
+    Args:
+        model: The model being trained.
+        loader: Data loader providing batches of PyGeometric Data objects.
+        criterion: Classification loss function (CrossEntropyLoss).
+        optimizer: Optimizer for the model (AdamW).
+
+    Returns:
+        avg_loss: Mean loss over the entire dataset.
+        avg_accuracy: Fraction of correctly classified samples over the dataset.
+        (These values are representative of the model during train mode)
+    """
     model.train()
+
     total_loss = 0
     total_correct = 0
 
-    for data in loader:
+    pbar = tqdm(loader, desc="Training", leave=False)
+
+    for data in pbar:
         optimizer.zero_grad()
         logits, _ = model(data.to(next(model.parameters()).device))
         pred = logits.argmax(dim=1)
@@ -108,13 +68,30 @@ def train_epoch(
 
 @torch.no_grad()
 def evaluate_model(
-    model: EGNN, loader: FastLoader, criterion: CrossEntropyLoss
+    model: NequIP, loader: FastLoader, criterion: CrossEntropyLoss
 ) -> tuple[float, float]:
+    """
+    Evaluates the model on all the data in the given data loader
+    and reports loss and accuracy on eval mode.
+
+    Args:
+        model: The model being trained.
+        loader: Data loader providing batches of PyGeometric Data objects.
+        criterion: Classification loss function (CrossEntropyLoss).
+
+    Returns:
+        avg_loss: Mean loss over the entire dataset.
+        avg_accuracy: Fraction of correctly classified samples over the dataset.
+        (These values are representative of the model during eval mode)
+    """
     model.eval()
+
     total_loss = 0
     total_correct = 0
 
-    for data in loader:
+    pbar = tqdm(loader, desc="Evaluating", leave=False)
+
+    for data in pbar:
         logits, _ = model(data.to(next(model.parameters()).device))
         pred = logits.argmax(dim=1)
         total_loss += criterion(logits, data.y).item() * pred.shape[0]
@@ -123,17 +100,29 @@ def evaluate_model(
     avg_loss = total_loss / len(loader.dataset)
     avg_accuracy = total_correct / len(loader.dataset)
 
+    pbar.close()
+
     return avg_loss, avg_accuracy
 
 
 def plot_training_curves(
     exp_path: Path,
-    vol: Volume | None,
     train_losses: list[float],
     test_losses: list[float],
     train_accuracies: list[float],
     test_accuracies: list[float],
 ) -> None:
+    """
+    Plots and saves loss and accuracy curves (all on the same graph).
+
+    Args:
+        exp_path: Outer directory of the expirement which is where the
+                  figure will be saved.
+        train_losses: Losses from each epoch for train set.
+        test_losses: Losses from each epoch for test set.
+        train_accuracies: Accuricies from each epoch for train set.
+        test_accuracies: Accuricies from each epoch for test set.
+    """
     assert (
         len(train_losses)
         == len(test_losses)
@@ -170,35 +159,46 @@ def plot_training_curves(
     plt.savefig(out_path)
     plt.close(fig)
 
-    if vol is not None:
-        vol.commit()
-
 
 def train(
+    config: Config,
     exp_path: Path,
-    coord_path: Path,
-    label_path: Path,
-    label_map_path: Path,
-    vol: Volume | None,
+    train_loader: FastLoader,
+    train_eval_loader: FastLoader,
+    test_loader: FastLoader,
+    class_weights: torch.Tensor,
     device: torch.device,
-    hp: HParams,
 ) -> None:
+    """
+    Runs the full training pipeline given the necessary
+    information. Saves all information (checkpoint, logs, and
+    graph).
+
+    Args:
+        config: Contains all training hyperparameter information.
+                See Config class for more details.
+        exp_path: Outer directory for experiments which will contain
+                  model checkpoints and logs.
+        train_loader: Training set data loader.
+        train_eval_loader: Training set evaluaiton data loader (subset of
+                           training set).
+        test_loader: Test set data loader.
+        class_weights: Class weights to remove bias from imbalanced data.
+        device: Device on which the model is trained (e.g. cuda).
+    """
     # Prepare info
-    train_loader, train_eval_loader, test_loader = get_loaders(
-        coord_path, label_path, label_map_path, device, hp
+    set_seed()
+    model = NequIP(config).to(device)
+
+    criterion = CrossEntropyLoss(
+        class_weights.to(device), label_smoothing=config.label_smoothing
     )
-
-    model = EGNN(
-        hp.num_buckets,
-        hp.num_hidden,
-        hp.num_reg_layers,
-        hp.num_classes,
-        hp.dropout_prob,
-    ).to(device)
-
-    criterion = CrossEntropyLoss(label_smoothing=hp.label_smoothing)
-    optimizer = AdamW(model.parameters(), lr=hp.lr)
-    scheduler = CosineAnnealingLR(optimizer, T_max=hp.epochs)
+    optimizer = AdamW(
+        model.parameters(), lr=config.lr, weight_decay=config.weight_decay
+    )
+    scheduler = CosineAnnealingLR(
+        optimizer, T_max=config.epochs, eta_min=config.eta_min
+    )
 
     train_losses: list[float] = []
     test_losses: list[float] = []
@@ -206,26 +206,18 @@ def train(
     train_accuracies: list[float] = []
     test_accuracies: list[float] = []
 
-    best_test_acc: float = 0.0
-
     # Initialize directories
     exp_path.mkdir(parents=True, exist_ok=True)
     (exp_path / "models").mkdir(parents=True, exist_ok=True)
 
-    with open(exp_path / "log.txt", "w", encoding="utf-8") as f:
-        f.write(f"{hp}\n")
-    if vol is not None:
-        vol.commit()
-
     # Training loop
-    for epoch in range(1, hp.epochs + 1):
+    for epoch in range(1, config.epochs + 1):
         # Train loss from training and everything else on eval mode
         train_loss, _ = train_epoch(model, train_loader, criterion, optimizer)
+        scheduler.step()
 
         _, train_acc = evaluate_model(model, train_eval_loader, criterion)
         test_loss, test_acc = evaluate_model(model, test_loader, criterion)
-
-        scheduler.step()
 
         # Log info
         log_line = (
@@ -236,28 +228,21 @@ def train(
         with open(exp_path / "log.txt", "a", encoding="utf-8") as f:
             f.write(f"{log_line}\n")
 
+        print(log_line)
+
         # Save the model at every checkpoint or when we have a new best accuracy
         state_dict_cpu = {k: v.detach().cpu() for k, v in model.state_dict().items()}
 
-        if test_acc > best_test_acc:
-            best_test_acc = test_acc
-            torch.save(state_dict_cpu, exp_path / "models" / f"model_best.pth")
-
-        # Checkpoint
-        if epoch % hp.checkpoint_freq == 0:
-            print(log_line)
+        # Checkpoint or final epoch
+        if epoch % config.checkpoint_freq == 0 or epoch == config.epochs:
             torch.save(state_dict_cpu, exp_path / "models" / f"model_{epoch}.pth")
 
         # Save for plotting
-        train_losses.append(train_loss)
-        test_losses.append(test_loss)
-        train_accuracies.append(train_acc)
-        test_accuracies.append(test_acc)
-
-        # Commit all changes to volume
-        if vol is not None:
-            vol.commit()
+        train_losses.append(train_loss)  # Train mode
+        test_losses.append(test_loss)  # Eval mode
+        train_accuracies.append(train_acc)  # Eval mode
+        test_accuracies.append(test_acc)  # Eval mode
 
     plot_training_curves(
-        exp_path, vol, train_losses, test_losses, train_accuracies, test_accuracies
+        exp_path, train_losses, test_losses, train_accuracies, test_accuracies
     )
