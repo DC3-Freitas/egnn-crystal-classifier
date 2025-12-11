@@ -17,19 +17,23 @@ from egnn_crystal_classifier.data_prep.graph_construction import construct_graph
 from egnn_crystal_classifier.utils import set_seed
 
 
-def get_data_from_files(
+def get_all_raw_synthetic_data(
     config: Config, synthetic_data_path: Path
 ) -> tuple[npt.NDArray[np.float32], list[str]]:
     """
-    Extracts data from files and returns them in raw graph form.
+    Extracts synthetic from files and returns them in raw graph form.
+
+    The data should lie in as subdirectories in an outer directory. Each
+    subdirectory should be named the structure of the data it contains.
 
     Args:
         config: Configuration for things like number of nearest neighbors.
-        synthetic_data_path: Path where synthetic data lies.
+        synthetic_data_path: Path of outer directory containing all structure
+                             directories which contain synthetic data.
 
     Returns:
-        x_data: Shape (N, num neighbors + 1, 3) numpy array of graphs denoting
-                the raw (non-normalized) positions of each atom in the graph.
+        x_data (N, num neighbors + 1, 3): Numpy array of graphs denoting the raw (non-normalized)
+                                          positions of each atom in the graph.
         y_strs_list: The ground truth structure (as a string) corresponding to each graph.
     """
     x_data_list: list[npt.NDArray[np.float32]] = []
@@ -53,6 +57,82 @@ def get_data_from_files(
     return np.concat(x_data_list), y_strs_list
 
 
+def raw_positions_to_loader(
+    config: Config,
+    all_positions: npt.NDArray[np.float32],
+    cell: npt.NDArray[np.float32] | None = None,
+) -> FastLoader:
+    """
+    Creates dataloader from raw unnormalized coordinates and
+    optional cell.
+
+    Args:
+        config: Configuration for things like number of nearest neighbors.
+        all_positions (N, 3): Raw unnormalized coordinates of atoms.
+        cell (3, 4) | None:  Ovito simulation cell (we ignore the pbc flags and assume
+                             pbc is applied everywhere).
+
+    Returns:
+        Data loader after processing the raw positions (with no labels).
+    """
+    _, graph = construct_graph_lists(
+        all_positions,
+        config.num_neighbors,
+        cell,
+    )
+    dataset = CrystalDataset(graph, label_strs=None, label_map=None)
+    loader = FastLoader(dataset, config.batch_size, shuffle=False)
+    return loader
+
+
+def file_to_loader(config: Config, path: Path) -> FastLoader:
+    """
+    Creates dataloader from a given path assuming a single frame.
+
+    Args:
+        config: Configuration for things like number of nearest neighbors.
+        path: Path of OVITO file.
+
+    Returns:
+        Data loader for the atoms described in the file (with no label).
+    """
+    pipeline = import_file(path)
+    lattice = pipeline.compute()
+
+    loader = raw_positions_to_loader(
+        config,
+        np.array(lattice.particles.positions, dtype=np.float32),
+        np.array(lattice.cell, dtype=np.float32),
+    )
+    return loader
+
+
+def all_synthetic_data_to_loader(
+    config: Config, synthetic_data_path: Path
+) -> FastLoader:
+    """
+    Creates a dataloader of all synthetic data.
+
+    The data should lie in as subdirectories in an outer directory. Each
+    subdirectory should be named the structure of the data it contains.
+
+    Args:
+        config: Configuration for things like number of nearest neighbors.
+        synthetic_data_path: Path of outer directory containing all structure
+                             directories which contain synthetic data.
+
+    Returns:
+        Dataloader that contains all synthetic data and corresponding labels.
+    """
+    x_data, y_strs_list = get_all_raw_synthetic_data(config, synthetic_data_path)
+    dataset = CrystalDataset(
+        x_data,
+        y_strs_list,
+        config.label_map,
+    )
+    return FastLoader(dataset, config.batch_size, shuffle=False)
+
+
 def calculate_class_weights(config: Config, y_strs_list: list[str]) -> torch.Tensor:
     """
     Calculates weights so that each class recieves equal weighting.
@@ -71,16 +151,19 @@ def calculate_class_weights(config: Config, y_strs_list: list[str]) -> torch.Ten
     return torch.tensor(inv_freq / inv_freq.mean()).float()
 
 
-def create_loaders(
+def get_loaders_for_training(
     config: Config, synthetic_data_path: Path
 ) -> tuple[FastLoader, FastLoader, FastLoader, torch.Tensor]:
     """
     Creates data loaders from synthetic data according to the specified configs.
+    Also determines class-weights for training such that classes are balanced.
+
+    The data should lie in as subdirectories in an outer directory. Each
+    subdirectory should be named the structure of the data it contains.
 
     Args:
         config: Configuration for data preparation pipeline.
-        synthetic_data_path: Path for the directory containing the synthetic data.
-                             Should have folders for each structure (e.g. "bcc").
+        synthetic_data_path: Path for the outer directory containing the synthetic data.
 
     Returns:
         train_loader: Data loader for loading training data.
@@ -92,7 +175,7 @@ def create_loaders(
     set_seed()
 
     # Prep data
-    x_data, y_strs_list = get_data_from_files(config, synthetic_data_path)
+    x_data, y_strs_list = get_all_raw_synthetic_data(config, synthetic_data_path)
     num_data_points = len(x_data)
 
     train_section = int(config.train_split_frac * num_data_points)
@@ -128,7 +211,7 @@ def create_loaders(
     train_loader = FastLoader(train_dataset, config.batch_size, shuffle=True)
     train_eval_loader = FastLoader(train_eval_dataset, config.batch_size, shuffle=False)
     test_loader = FastLoader(test_dataset, config.batch_size, shuffle=False)
-    weights = calculate_class_weights(config, y_strs_list)
+    weights = calculate_class_weights(config, [y_strs_list[i] for i in train_indices])
 
     return (
         train_loader,

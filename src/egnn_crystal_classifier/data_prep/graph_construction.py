@@ -16,13 +16,13 @@ def construct_graph_lists(
     pos_individual: NDArray[np.float32],
     num_neighbors: int,
     cell: NDArray[np.float32] | None = None,
-) -> tuple[NDArray[np.float32], NDArray[np.float32]]:
+) -> tuple[NDArray[np.integer[Any]], NDArray[np.float32]]:
     """
     Creates (numpy) list of (potentially modifed) positions of atoms for each graph.
 
     Each atom is treated as a graph center with its num_neighbors
     nearest neighbors being part of its graph. The positions (not indices)
-    of these (num_nodes = num_neighbors + 1) make up an entry in our graphs (numpy) list.
+    of these (num_nodes = num_neighbors + 1) make up an entry in our graph's (numpy) list.
 
     If a cell is provided, it will attempt to apply PBC.
 
@@ -31,8 +31,8 @@ def construct_graph_lists(
     Args:
         pos_individual (B, 3): Coordinates of each atom.
         num_neighbors: Number of nearest neighbors to consider for each atom.
-        cell (3, 4): Ovito simulation cell (we ignore the pbc flags and assume
-                     pbc is applied everywhere).
+        cell (3, 4) | None: Ovito simulation cell (we ignore the pbc flags and assume
+                            pbc is applied everywhere).
 
     Returns:
         neighbors (B, num_nodes): The indices of the nearest neighbor for each atom.

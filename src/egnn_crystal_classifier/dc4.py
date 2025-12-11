@@ -1,151 +1,143 @@
 """
-Core class for DC4 inference.
+TODO
 """
 
-import json
-import os
+from dataclasses import asdict
+from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 import torch
-from ovito.data import DataCollection
+from ovito.data import DataCollection  # pylint: disable=no-name-in-module
+from tqdm import tqdm
 
-from egnn_crystal_classifier.amorphous.coherence import get_amorphous_mask
-from egnn_crystal_classifier.amorphous.outlier import get_outlier_mask
-from egnn_crystal_classifier.constants import *
-from egnn_crystal_classifier.data_prep.data_handler import CrystalDataset, FastLoader
-from egnn_crystal_classifier.data_prep.graph_construction import (
-    construct_batched_graph,
-    construct_graph_lists,
-)
-from egnn_crystal_classifier.ml_model.model import EGNN
-from egnn_crystal_classifier.ml_train.hparams import HParams
+from egnn_crystal_classifier.config import Config
+from egnn_crystal_classifier.data_prep.data_reader import raw_positions_to_loader
+from egnn_crystal_classifier.data_prep.graph_construction import construct_graph_lists
+from egnn_crystal_classifier.ml_model.model import NequIP
+from egnn_crystal_classifier.other_structures.coherence import compute_coherence
+from egnn_crystal_classifier.other_structures.outlier_data import OutlierData
 
 
 class DC4:
+    """
+    TODO
+    """
+
     def __init__(
         self,
-        model: EGNN = None,
-        label_map: dict[str, int] = None,
-        run_amorphous: bool = True,
-        coherence_cutoff: float | None = None,
-        hparams: HParams = HParams(),
+        config: Config,
+        model: NequIP,
+        outlier_data: OutlierData,
     ) -> None:
         """
-        Initialize DC4 inference class. Loads pretrained model and
-        preset labelmap if not provided. Auto-detects device (CPU or GPU).
+        TODO
 
-        Args:
-            model (EGNN, optional): Pretrained EGNN model. Defaults to None.
-            label_map (dict[str, int], optional): Mapping of labels to integers.
-                Defaults to None, which uses a preset label map.
-            hparams (HParams, optional): Hyperparameters for the model.
-                Defaults to HParams() with preset values.
+        maybe warn about rep exposure
         """
-
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if model is None:
-            # Load pretrained model
-            self.model = EGNN(
-                num_buckets=hparams.num_buckets,
-                hidden=hparams.num_hidden,
-                num_reg_layers=hparams.num_reg_layers,
-                num_classes=hparams.num_classes,
-                dropout_prob=hparams.dropout_prob,
-            )
-            self.model.load_state_dict(torch.load(MODEL_PATH, map_location=self.device))
-            print("No model provided. I will use my pretrained model.")
-        else:
-            assert isinstance(model, EGNN), "Model must be an EGNN instance."
-            self.model = model
+        self.config = config
 
+        self.model = model
         self.model.to(self.device)
         self.model.eval()
-        self.hparams = hparams
 
-        # Mapping
-        if label_map is None:
-            label_map = json.loads((open(LABEL_MAP_PATH).read()))
-            print("No label map provided, using defaults:", label_map)
+        self.outlier_data = outlier_data
 
-        # Inject additional labels
-        label_map = label_map.copy()
-        label_map["amorphous"] = len(label_map)
-        label_map["unknown"] = len(label_map) + 1
+    @classmethod
+    def from_saved(cls, path: Path) -> "DC4":
+        """
+        TODO
+        """
+        info = torch.load(path, weights_only=False)
 
-        self.label_to_number = label_map
-        self.number_to_label = {v: k for k, v in label_map.items()}
+        config = Config(**info["config"])
 
-        self.coherence_cutoff = coherence_cutoff
-        self.run_amorphous = run_amorphous
+        # Rebuild the model
+        model = NequIP(config)
+        model.load_state_dict(info["state_dict"])
 
-        # TODO make these paths configurable
-        self.perfect_embeddings = np.load(PERFECT_EMBEDDINGS_PATH)
-        self.perfect_embeddings = torch.from_numpy(self.perfect_embeddings).to(
-            self.device
-        )
-        self.delta_cutoffs = np.load(DELTA_CUTOFFS_PATH)
-        self.delta_cutoffs = torch.from_numpy(self.delta_cutoffs).to(self.device)
+        outlier_data = OutlierData(**info["outlier_data"])
+
+        return cls(config, model, outlier_data)
+
+    def save_dc4(self, path: Path) -> None:
+        """
+        Saves entire model (NequIP, config, and outlier info) into single file.
+
+        Args:
+            path: Path to save the model to.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        info = {
+            "state_dict": self.model.state_dict(),
+            "config": asdict(self.config),
+            "outlier_data": asdict(self.outlier_data),
+        }
+        torch.save(info, path)
 
     def calculate(
         self,
         data: DataCollection,
-    ) -> np.ndarray:
+    ) -> tuple[
+        npt.NDArray[np.float32], npt.NDArray[np.float32], npt.NDArray[np.float32]
+    ]:
         """
-        Calculate the crystal structure types for the given data.
+        Performs structural classification on the given data and
+        determines local disorder via coherence.
 
         Args:
-            data (DataCollection): The input data collection.
-            hparams (HParams): Hyperparameters for the model.
+            data: The input data collection.
 
         Returns:
-            np.ndarray: Predicted crystal structure types.
+            predictions: Predicted crystal structure types.
+            coherence: How different the atom's local structure is from that of its neighbors
+            embeddings: Embeddings for each atom.
         """
+        loader = raw_positions_to_loader(
+            self.config,
+            np.array(data.particles.positions, dtype=np.float32),
+            np.array(data.cell, dtype=np.float32),
+        )
 
-        neighbors, pos_graphs = construct_graph_lists(
-            pos_individual=data.particles.positions,
-            num_neighbors=self.hparams.num_neighbors,
-            cell=data.cell[...]
-        )
-        dataset = CrystalDataset(
-            pos_graphs=pos_graphs,
-            label_strs=None,
-            label_map=self.label_to_number,
-        )
-        loader = FastLoader(
-            dataset=dataset,
-            batch_size=self.hparams.batch_size,
-            num_buckets=self.hparams.num_buckets,
-            calc_device=self.device,
-            shuffle=False,
-        )
-        with torch.no_grad():
-            for i, graphs in enumerate(loader):
-                graphs = graphs.to(self.device)
-                batch_output, embeddings = self.model(graphs)
-                if i == 0:
-                    output = batch_output
-                    embeddings_list = embeddings
-                else:
-                    output = torch.cat((output, batch_output), dim=0)
-                    embeddings_list = torch.cat((embeddings_list, embeddings), dim=0)
+        # Get predictions and embeddings
+        output_list: list[int] = []
+        embeddings_list: list[torch.Tensor] = []
 
-        predictions = output.argmax(dim=1).cpu().numpy()
-        if self.run_amorphous:
-            amorphous_mask = get_amorphous_mask(
-                neighbors_raw=neighbors,
-                embeddings=embeddings_list,
-                batch_size=self.hparams.batch_size,
-                calc_device=self.device,
-                cutoff=self.coherence_cutoff,
-            )
-            outlier_mask = get_outlier_mask(
-                embeddings=embeddings_list,
-                predictions=predictions,
-                ref_embeddings=self.perfect_embeddings,
-                delta_cutoffs=self.delta_cutoffs,
-            )
-            predictions[np.where(amorphous_mask == 1)] = self.label_to_number[
-                "amorphous"
-            ]
-            predictions[np.where(outlier_mask == 1)] = self.label_to_number["unknown"]
-        return predictions
+        for graphs in tqdm(loader, desc="Forward Pass"):
+            with torch.inference_mode():
+                batch_output, embeddings = self.model(graphs.to(self.device))
+
+            output_list.extend(batch_output.cpu())
+            embeddings_list.append(embeddings.cpu())
+
+        predictions = np.array(output_list, dtype=np.float32).argmax(axis=1)
+        embeddings_torch = torch.cat(embeddings_list, axis=0)
+        embeddings_np = embeddings_torch.numpy().astype(np.float32)
+
+        # Outlier detection
+        neighbors, _ = construct_graph_lists(
+            np.array(data.particles.positions, dtype=np.float32),
+            self.config.num_neighbors,
+            np.array(data.cell, dtype=np.float32),
+        )
+        coherence = compute_coherence(
+            self.config, neighbors, embeddings_torch, self.device
+        )
+        amorphous_mask = coherence <= self.outlier_data.alpha_cutoff
+
+        similarity_to_ref = (
+            embeddings_np * self.outlier_data.perfect_embeddings[predictions]
+        ).sum(axis=-1)
+        unknown_crystal_mask = (
+            similarity_to_ref <= self.outlier_data.delta_cutoffs[predictions]
+        )
+
+        # Modify predictions
+
+        # predictions[np.where(amorphous_mask == 1)] = self.config.label_map["amorphous"]
+        predictions[np.where(unknown_crystal_mask == 1)] = self.config.label_map[
+            "unknown_crystal"
+        ]
+
+        return predictions, coherence, embeddings_np

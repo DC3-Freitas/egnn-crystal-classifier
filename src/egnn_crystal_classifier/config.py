@@ -4,8 +4,6 @@ Configs for the entire pipeline.
 
 from dataclasses import dataclass, field
 
-from e3nn.o3 import Irreps
-
 
 @dataclass
 class Config:
@@ -15,7 +13,9 @@ class Config:
     Attributes:
         num_neighbors: Number of nearest neighbors to consider.
         num_species: Number of species of atoms the model should be able to handle.
+
         label_map: Mapping from species name to integer.
+        crystals: All non-outlier structures (e.g., bcc).
 
         output_classes: Number of output classes.
         num_convs: Number of times to run interaction block in model.
@@ -54,11 +54,17 @@ class Config:
              atoms will have closer representations.
 
         checkpoint_freq: Frequency of saving our model.
+
+        coherence_range_l: Start of range (inclusive) of largest dot product similarities
+                           to take the average of for our coherence calculations.
+        coherence_range_r: End of range (exclusive) of largest dot product similarities
+                           to take the average of for our coherence calculations.
     """
 
     # Model (general settings)
     num_neighbors: int = 16
     num_species: int = 1
+
     label_map: dict[str, int] = field(
         default_factory=lambda: {
             "bcc": 0,
@@ -67,9 +73,12 @@ class Config:
             "hcp": 3,
             "hd": 4,
             "sc": 5,
-            "unknown_solid": 6,
-            "liquid": 7,
+            "unknown_crystal": 6,
+            "amorphous": 7,
         }
+    )
+    crystals: list[str] = field(
+        default_factory=lambda: ["bcc", "cd", "fcc", "hcp", "hd", "sc"]
     )
 
     output_classes = 6
@@ -80,8 +89,8 @@ class Config:
     node_embedding_frozen: int = 8
 
     # Model (irreps)
-    irreps_edge_sph: Irreps = Irreps("1x0e + 1x1e + 1x2e")  # Must be even and mul=1
-    irreps_hidden: Irreps = Irreps("8x0e + 8x1e + 8x2e")  # Must be even
+    irreps_edge_sph: str = "1x0e + 1x1e + 1x2e"  # Must be even and mul=1
+    irreps_hidden: str = "8x0e + 8x1e + 8x2e"  # Must be even
 
     # Model (edge length projection)
     edge_dist_n: int = 8
@@ -106,7 +115,11 @@ class Config:
     eta_min: float = 1e-4
     weight_decay: float = 1e-4
 
-    label_smoothing: float = 0.0  # See docstring for why it's turned off
+    label_smoothing: float = 0.1
 
     # Training (misc)
     checkpoint_freq: int = 5
+
+    # Coherence
+    coherence_range_l = 2  # Inclusive
+    coherence_range_r = 5  # Exclusive

@@ -2,57 +2,37 @@
 OVITO modifier for crystal structure classification using the DC4 model.
 """
 
+from pathlib import Path
+
+from ovito.data import DataCollection  # pylint: disable=no-name-in-module
+from ovito.pipeline import ModifierInterface  # pylint: disable=no-name-in-module
+from traits.api import Bool
+
 from egnn_crystal_classifier.dc4 import DC4
-from egnn_crystal_classifier.ml_train.hparams import HParams
-from ovito.data import DataCollection
-from ovito.pipeline import ModifierInterface
-from traits.api import Any, Bool, Float
 
 
 class DC4Modifier(ModifierInterface):
     """
-    OVITO modifier for crystal structure classification using the DC4 equivariant
-    graph neural network model. Predicts crystal structure types based on atomic positions
-    and updates DataCollection in-place. Amorphous and unknown crystal structures
-    will be implemented in the future.
+    OVITO modifier for crystal structure classification using DC4.
+    Predicts crystal structure types and coherence based on atomic positions
+    and updates DataCollection in-place.
     """
 
-    model_info = Any()
+    model_path: str
     run = Bool(False, help="Click to start model processing.")
-    run_amorphous_outlier = Bool(True, help="Run amorphous and outlier detection")
-    coherence_cutoff = Any(help="Coherence cutoff for amorphous structure detection.")
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def modify(self, data: DataCollection, frame: int, **kwargs) -> None:
+    # pylint: disable=unused-argument
+    def modify(self, data: DataCollection, frame: int, **_: object) -> None:
         """
         Modify the DataCollection in-place by predicting crystal structure types
-        using the DC4 model.
+        and calculating coherence using the DC4 model.
 
         Args:
-            data (DataCollection): The data to modify.
-            frame (int): The current frame number.
-            **kwargs: Additional keyword arguments (not used).
+            data: The data to modify.
+            frame: The current frame number.
         """
-        if not self.run:
-            return
-        assert isinstance(
-            self.model_info, (str, type(None))
-        ), "Model must be a string path to the model or None for default model."
-        assert isinstance(
-            self.coherence_cutoff, (float, type(None))
-        ), "Coherence cutoff must be a float or None."
-        if isinstance(self.model_info, str):
-            self.model = DC4(
-                model_path=self.model_info,
-                coherence_cutoff=self.coherence_cutoff,
-                run_amorphous=self.run_amorphous_outlier,
-            )
-        else:
-            self.model = DC4(
-                coherence_cutoff=self.coherence_cutoff,
-                run_amorphous=self.run_amorphous_outlier,
-            )
-        outputs = self.model.calculate(data)
-        data.particles_.create_property("Particle Type", data=outputs)
+        model = DC4.from_saved(Path(self.model_path))
+        predictions, coherence, __ = model.calculate(data)
+
+        data.particles_.create_property("Particle Type", data=predictions)
+        data.particles_.create_property("Coherence", data=coherence)

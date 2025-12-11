@@ -1,9 +1,11 @@
 import os
+from pathlib import Path
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+BASE_DIR = Path(os.path.abspath(os.path.dirname(__file__)))
 
 # DATA GENERATION
-SYNTH_DATA_PATH = os.path.join(BASE_DIR, "synthetic_data")
+SYNTH_DATA_PATH = BASE_DIR / "resources" / "synthetic_data"
+
 NN_COUNT = 16
 CHECKERBOARD_CELL_SIZE_XZ = 4
 CHECKERBOARD_CELL_SIZE_Y = 3

@@ -47,7 +47,7 @@ class NequIP(nn.Module):
         super().__init__()
 
         # Requires even irreps
-        for _, ir in config.irreps_hidden + config.irreps_edge_sph:
+        for _, ir in Irreps(config.irreps_hidden) + Irreps(config.irreps_edge_sph):
             assert ir.p == 1, "we assume that all irreps are even"
 
         self.config = config
@@ -71,7 +71,7 @@ class NequIP(nn.Module):
             gate_count = 0
             gated: list[tuple[int, Irrep]] = []
 
-            for mul, ir in config.irreps_hidden:
+            for mul, ir in Irreps(config.irreps_hidden):
                 if ir.l == 0:
                     scalars += mul
                 else:
@@ -85,8 +85,8 @@ class NequIP(nn.Module):
                 act_gates=[nn.Sigmoid()],
                 irreps_gated=Irreps(gated),
             )
-            assert (
-                gate.irreps_out == config.irreps_hidden
+            assert gate.irreps_out == Irreps(
+                config.irreps_hidden
             ), "output of gate should be hidden"
 
             self.layers_core.append(
@@ -94,11 +94,11 @@ class NequIP(nn.Module):
                     irreps_in=(
                         Irreps(f"{config.node_embedding_init}x0e")
                         if i == 0
-                        else config.irreps_hidden
+                        else Irreps(config.irreps_hidden)
                     ),
                     irreps_out=gate.irreps_in,
                     irreps_node_frozen=Irreps(f"{config.node_embedding_frozen}x0e"),
-                    irreps_edge_sph=config.irreps_edge_sph,
+                    irreps_edge_sph=Irreps(config.irreps_edge_sph),
                     edge_dist_n=config.edge_dist_n,
                     radial_hidden=config.radial_hidden,
                 )
@@ -108,8 +108,8 @@ class NequIP(nn.Module):
         assert len(self.layers_core) == len(self.layers_gate) == config.num_convs
 
         self.to_inv_embedding = FullyConnectedTensorProduct(
-            irreps_in1=config.irreps_hidden,
-            irreps_in2=config.irreps_hidden,
+            irreps_in1=Irreps(config.irreps_hidden),
+            irreps_in2=Irreps(config.irreps_hidden),
             irreps_out=f"{config.invariant_embedding_size}x0e",
         )
         self.pre_head_act = nn.SiLU()
@@ -162,7 +162,7 @@ class NequIP(nn.Module):
         edge_dists = edge_vecs.norm(dim=-1, keepdim=True)
 
         edge_sph = spherical_harmonics(
-            l=self.config.irreps_edge_sph,
+            l=Irreps(self.config.irreps_edge_sph),
             x=edge_vecs,
             normalize=True,
             normalization="component",

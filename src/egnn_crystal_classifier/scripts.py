@@ -1,119 +1,121 @@
 import json
+import os
 from pathlib import Path
 
 import modal
 import numpy as np
 import torch
-from modal import Volume
+from ovito.io import export_file, import_file
 
-from egnn_crystal_classifier.ml_model.model import EGNN
-from egnn_crystal_classifier.ml_train.hparams import HParams
+from egnn_crystal_classifier.config import Config
+from egnn_crystal_classifier.data_prep.data_reader import get_loaders_for_training
+from egnn_crystal_classifier.dc4 import DC4
+from egnn_crystal_classifier.ml_model.model import NequIP
 from egnn_crystal_classifier.ml_train.train import train
+from egnn_crystal_classifier.other_structures.embedding_cutoffs import (
+    compute_cutoff,
+    compute_perfect_embeddings,
+)
+from egnn_crystal_classifier.other_structures.outlier_data import OutlierData
 
-app = modal.App()
+BASE_DIR = Path(os.path.abspath(os.path.dirname(__file__)))
 
-image = (
-    modal.Image.debian_slim()
-    .apt_install(
-        "libegl1",
-        "libgl1",
-        "libopengl0",
-        "libglvnd0",
-        "libdbus-1-3",
-        "libglib2.0-0",
-        "libxkbcommon-x11-0",
-        "libxcb-icccm4",
-        "libxcb-image0",
-        "libxcb-keysyms1",
-        "libxcb-render-util0",
-        "libxcb-xinerama0",
-        "libxcb-xinput0",
-        "libxcb-randr0",
-    )
-    .pip_install(
-        "torch",
-        "torch_geometric",
-        "tqdm",
-        "ovito",
-        "matplotlib",
-        "numpy",
-        "scipy",
-        "pandas",
-    )
-    .pip_install("torch-scatter", "torch-sparse", "torch-cluster", "torch-spline-conv")
-).add_local_python_source("egnn_crystal_classifier")
-
-vol = modal.Volume.from_name("egnn", create_if_missing=True)
-
-
-def save_data(
-    local_path: Path,
-    modal_path: Path | None,
-    vol: Volume,
-) -> None:
-    from egnn_crystal_classifier.data_gen.gen import gen
-
-    x_data, y_data, label_map = gen()
-
-    local_path.mkdir(parents=True, exist_ok=True)
-    coords_file = local_path / "coords.npy"
-    labels_file = local_path / "labels.json"
-    label_map_file = local_path / "label_map.json"
-
-    np.save(coords_file, x_data)
-    labels_file.write_text(json.dumps(y_data), encoding="utf-8")
-    label_map_file.write_text(json.dumps(label_map), encoding="utf-8")
-
-    if modal_path is not None:
-        remote_base = modal_path.as_posix()
-        with vol.batch_upload(force=True) as batch:
-            for local_file in (coords_file, labels_file, label_map_file):
-                remote_file = f"{remote_base}/{local_file.name}"
-                batch.put_file(str(local_file), remote_file)
-
-
-@app.function(gpu="A100", image=image, volumes={"/root/egnn": vol}, timeout=18000)
-def run_train(
-    exp_path: str,
-    coord_path: str,
-    label_path: str,
-    label_map_path: str,
-    vol: Volume | None,
-    device: str,
-    hp: HParams,
-) -> None:
-
-    train(
-        Path(exp_path),
-        Path(coord_path),
-        Path(label_path),
-        Path(label_map_path),
-        vol,
-        torch.device(device),
-        hp,
-    )
+SYNTH_DATA_PATH = BASE_DIR / "resources" / "synthetic_data"
+EXP_PATH = BASE_DIR / "resources" / "training_smoothing"
+NEQUIP_PATH = BASE_DIR / "resources" / "training_smoothing" / "models" / "model_20.pth"
+PERFECT_LATTICES_PATH = BASE_DIR / "resources" / "perfect_lattices"
+DC4_PATH = BASE_DIR / "resources" / "complete_models" / "dc4_smoothing.ckpt"
 
 
 def main() -> None:
+    config = Config()
+    device = "cuda"
+
     """
-    Save data to local and modal with this function
+    train_loader, train_eval_loader, test_loader, class_weights = (
+        get_loaders_for_training(config, SYNTH_DATA_PATH)
+    )
+    train(
+        config,
+        EXP_PATH,
+        train_loader,
+        train_eval_loader,
+        test_loader,
+        class_weights,
+        torch.device("cuda"),
+    )
+    return
     """
-    # save_data(Path("outputs/data"), Path("data"), vol)
+
+    dc4 = DC4.from_saved(DC4_PATH)
+    # print(dc4.outlier_data)
+    # print(dc4.config)
+    # return
+    pipeline = import_file(BASE_DIR / "dump.r_1100K_1.lammpstrj")
+    data = pipeline.compute(300)
+    pred, coh, _ = dc4.calculate(data)
+
+    data.particles_.create_property("structure", data=pred)
+    data.particles_.create_property("coherence", data=coh)
+
+    # -----------------------------------
+    # 4. Save only this frame
+    # -----------------------------------
+    export_file(
+        data,
+        "dump.r_1100K_1.lammpstrj_two.gz",
+        format="lammps/dump",
+        columns=[
+            "Particle Identifier",
+            "Position.X",
+            "Position.Y",
+            "Position.Z",
+            "structure",
+            "coherence",
+        ],
+    )
+    return
+
     """
-    Run training with this function
+    model = NequIP(config)
+    model.load_state_dict(torch.load(NEQUIP_PATH))
+    perfect = compute_perfect_embeddings(
+        config,
+        model,
+        PERFECT_LATTICES_PATH,
+        device,
+    )
+    cutoffs = compute_cutoff(config, model, perfect, SYNTH_DATA_PATH, device)
+    print(cutoffs)
+    dc4 = DC4(config, model, OutlierData(perfect, cutoffs))
+    dc4.save_dc4(DC4_PATH)
     """
-    hp = HParams()
-    with app.run():
-        run_train.remote(
-            ("/root/egnn/dropout_05_epochs_100_silu"),
-            ("/root/egnn/data/coords.npy"),
-            ("/root/egnn/data/labels.json"),
-            ("/root/egnn/data/label_map.json"),
-            vol,
-            "cuda",
-            hp,
-        )
+    return
 
 
 if __name__ == "__main__":
     main()
+
+"""
+Desired:
+Epoch 001: Train Loss = 0.7355, Test Loss = 0.1593, Train Acc = 0.9671, Test Acc = 0.9657
+Epoch 002: Train Loss = 0.1240, Test Loss = 0.0546, Train Acc = 0.9841, Test Acc = 0.9830
+Epoch 003: Train Loss = 0.0652, Test Loss = 0.0315, Train Acc = 0.9918, Test Acc = 0.9902
+Epoch 004: Train Loss = 0.0502, Test Loss = 0.0234, Train Acc = 0.9927, Test Acc = 0.9917
+Epoch 005: Train Loss = 0.0426, Test Loss = 0.0200, Train Acc = 0.9930, Test Acc = 0.9914
+Epoch 006: Train Loss = 0.0364, Test Loss = 0.0206, Train Acc = 0.9917, Test Acc = 0.9898
+Epoch 007: Train Loss = 0.0329, Test Loss = 0.0131, Train Acc = 0.9968, Test Acc = 0.9954
+Epoch 008: Train Loss = 0.0299, Test Loss = 0.0111, Train Acc = 0.9971, Test Acc = 0.9957
+Epoch 009: Train Loss = 0.0275, Test Loss = 0.0102, Train Acc = 0.9977, Test Acc = 0.9964
+Epoch 010: Train Loss = 0.0253, Test Loss = 0.0120, Train Acc = 0.9952, Test Acc = 0.9939
+Epoch 011: Train Loss = 0.0239, Test Loss = 0.0084, Train Acc = 0.9978, Test Acc = 0.9965
+Epoch 012: Train Loss = 0.0229, Test Loss = 0.0082, Train Acc = 0.9980, Test Acc = 0.9964
+Epoch 013: Train Loss = 0.0216, Test Loss = 0.0078, Train Acc = 0.9981, Test Acc = 0.9972
+Epoch 014: Train Loss = 0.0203, Test Loss = 0.0075, Train Acc = 0.9980, Test Acc = 0.9964
+Epoch 015: Train Loss = 0.0198, Test Loss = 0.0077, Train Acc = 0.9981, Test Acc = 0.9972
+Epoch 016: Train Loss = 0.0188, Test Loss = 0.0073, Train Acc = 0.9981, Test Acc = 0.9970
+Epoch 017: Train Loss = 0.0185, Test Loss = 0.0069, Train Acc = 0.9984, Test Acc = 0.9974
+Epoch 018: Train Loss = 0.0177, Test Loss = 0.0066, Train Acc = 0.9985, Test Acc = 0.9973
+Epoch 019: Train Loss = 0.0177, Test Loss = 0.0066, Train Acc = 0.9987, Test Acc = 0.9972
+Epoch 020: Train Loss = 0.0175, Test Loss = 0.0065, Train Acc = 0.9985, Test Acc = 0.9972
+"""
