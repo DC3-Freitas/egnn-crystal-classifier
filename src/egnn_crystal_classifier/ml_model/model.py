@@ -189,4 +189,7 @@ class NequIP(nn.Module):
             inv_embeddings.norm(dim=-1, keepdim=True) + 1e-8
         )
 
-        return self.head(self.pre_head_act(inv_embeddings)), inv_embeddings
+        return (
+            self.head(self.pre_head_act(inv_embeddings)),
+            inv_embeddings,
+        )

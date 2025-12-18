@@ -85,19 +85,20 @@ def raw_positions_to_loader(
     return loader
 
 
-def file_to_loader(config: Config, path: Path) -> FastLoader:
+def file_to_loader(config: Config, path: Path, frame: int | None = None) -> FastLoader:
     """
     Creates dataloader from a given path assuming a single frame.
 
     Args:
         config: Configuration for things like number of nearest neighbors.
         path: Path of OVITO file.
+        frame: Optional frame to load.
 
     Returns:
         Data loader for the atoms described in the file (with no label).
     """
     pipeline = import_file(path)
-    lattice = pipeline.compute()
+    lattice = pipeline.compute(frame)
 
     loader = raw_positions_to_loader(
         config,

@@ -54,6 +54,7 @@ def construct_graph_lists(
         print("Constructing graph with boxsize:", boxsize)
         tree = cKDTree(pos_individual, boxsize=boxsize)
     else:
+        print("Constructing graph with no boxsize provided:", boxsize)
         tree = cKDTree(pos_individual)
 
     neighbors = tree.query(pos_individual, k=num_neighbors + 1)[1]
