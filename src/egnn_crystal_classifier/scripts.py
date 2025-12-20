@@ -176,11 +176,6 @@ def main() -> None:
 
     Example code that annotates a structure (without explicitely labelling amorphous):
 
-
-
-    """
-    # Testing code
-
     pipeline = import_file(BASE_DIR / "resources" / "copper_structures.gz")
     pipeline.modifiers.append(get_modifier())
 
@@ -197,6 +192,7 @@ def main() -> None:
             "structure",
         ],
     )
+    """
 
 
 if __name__ == "__main__":
