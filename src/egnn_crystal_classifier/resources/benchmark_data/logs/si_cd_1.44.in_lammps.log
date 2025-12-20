@@ -1,0 +1,162 @@
+LAMMPS (29 Aug 2024)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:98)
+  using 1 OpenMP thread(s) per MPI task
+
+#---------------------------- Atomic setup ------------------------------------#
+units            metal
+timestep         0.001
+boundary         p p p
+lattice          diamond 5.43
+Lattice spacing in x,y,z = 5.43 5.43 5.43
+region           sim_box block 0 10 0 10 0 10
+create_box       1 sim_box
+Created orthogonal box = (0 0 0) to (54.3 54.3 54.3)
+  1 by 1 by 1 MPI processor grid
+create_atoms     1 box
+Created 8000 atoms
+  using lattice units in orthogonal box = (0 0 0) to (54.3 54.3 54.3)
+  create_atoms CPU = 0.001 seconds
+
+pair_style       edip                                             # interatomic potential (Lennard-Jones, EAM, etc.)
+pair_coeff       * * ${potentials_dir}/si.edip Si # interatomic potential parameters (ex. eam.alloy Cu_u3.eam)
+pair_coeff       * * md/potentials/si.edip Si 
+Reading edip potential file md/potentials/si.edip with DATE: 2011-09-15
+pair_modify      tail yes
+neigh_modify     delay 0                                                       # neighbor list update frequency (0 = every timestep)
+mass             1 28.0855                                                 # atomic mass
+variable         rnd equal round(random(0,999999,42))
+
+#----------------------------- Equilibriation ---------------------------------#
+velocity         all create 2429.2799999999997 ${rnd} dist gaussian              # initial velocities
+velocity         all create 2429.2799999999997 420940 dist gaussian              
+fix              f2 all nph iso 0 0 1.0        # barostat
+variable         rnd equal round(random(0,999999,0))
+fix              f3 all temp/csvr 2429.2799999999997 2429.2799999999997 0.1 ${rnd} # thermostat
+fix              f3 all temp/csvr 2429.2799999999997 2429.2799999999997 0.1 53464 
+run              10000                                           # equilibriation run
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 5.121382
+  ghost atom cutoff = 5.121382
+  binsize = 2.560691, bins = 22 22 22
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair edip, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.111 | 4.111 | 4.111 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press          Volume    
+         0   2429.28       -37199.627      0             -34687.868      17033.356      160103.01    
+     10000   2412.4704     -30900.175      0             -28405.796     -3401.1653      172317.18    
+Loop time of 113.415 on 1 procs for 10000 steps with 8000 atoms
+
+Performance: 7.618 ns/day, 3.150 hours/ns, 88.172 timesteps/s, 705.377 katom-step/s
+99.5% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 106.94     | 106.94     | 106.94     |   0.0 | 94.29
+Neigh   | 3.8265     | 3.8265     | 3.8265     |   0.0 |  3.37
+Comm    | 0.27933    | 0.27933    | 0.27933    |   0.0 |  0.25
+Output  | 7.5342e-05 | 7.5342e-05 | 7.5342e-05 |   0.0 |  0.00
+Modify  | 2.1618     | 2.1618     | 2.1618     |   0.0 |  1.91
+Other   |            | 0.2048     |            |       |  0.18
+
+Nlocal:           8000 ave        8000 max        8000 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           5274 ave        5274 max        5274 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:              0 ave           0 max           0 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       201954 ave      201954 max      201954 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 201954
+Ave neighs/atom = 25.24425
+Neighbor list builds = 343
+Dangerous builds = 0
+
+#----------------------------- Run simulation ---------------------------------#
+dump             d1 all custom 10000 md/data/si_cd/dump_1.44.gz id type x y z # snapshots
+run              90000
+Per MPI rank memory allocation (min/avg/max) = 4.116 | 4.116 | 4.116 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press          Volume    
+     10000   2412.4704     -30900.175      0             -28405.796     -3401.1653      172317.18    
+    100000   2457.8743     -30873.658      0             -28332.335     -23.940166      170901.91    
+Loop time of 1109.58 on 1 procs for 90000 steps with 8000 atoms
+
+Performance: 7.008 ns/day, 3.425 hours/ns, 81.112 timesteps/s, 648.897 katom-step/s
+99.6% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 1049.2     | 1049.2     | 1049.2     |   0.0 | 94.56
+Neigh   | 36.334     | 36.334     | 36.334     |   0.0 |  3.27
+Comm    | 2.4959     | 2.4959     | 2.4959     |   0.0 |  0.22
+Output  | 0.26187    | 0.26187    | 0.26187    |   0.0 |  0.02
+Modify  | 19.439     | 19.439     | 19.439     |   0.0 |  1.75
+Other   |            | 1.868      |            |       |  0.17
+
+Nlocal:           8000 ave        8000 max        8000 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           5342 ave        5342 max        5342 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:              0 ave           0 max           0 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       202538 ave      202538 max      202538 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 202538
+Ave neighs/atom = 25.31725
+Neighbor list builds = 3198
+Dangerous builds = 0
+undump           d1
+min_modify       line forcezero
+minimize         0 0 100000 100000                                                                               # minimize energy
+Per MPI rank memory allocation (min/avg/max) = 5.241 | 5.241 | 5.241 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press          Volume    
+    100000   2457.8743     -30873.658      0             -28332.335     -23.940166      170901.91    
+    101091   2457.8743     -33497.335      0             -30956.012      7181.1991      170901.91    
+Loop time of 24.4332 on 1 procs for 1091 steps with 8000 atoms
+
+99.7% CPU use with 1 MPI tasks x 1 OpenMP threads
+
+Minimization stats:
+  Stopping criterion = linesearch alpha is zero
+  Energy initial, next-to-last, final = 
+      -30873.658308415  -33497.3354592609  -33497.3354592609
+  Force two-norm initial, final = 249.68104 0.00088186932
+  Force max component initial, final = 8.5249748 7.9665868e-05
+  Final line search alpha, max atom move = 0.023269229 1.8537634e-06
+  Iterations, force evaluations = 1091 2078
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 24.095     | 24.095     | 24.095     |   0.0 | 98.61
+Neigh   | 0.078863   | 0.078863   | 0.078863   |   0.0 |  0.32
+Comm    | 0.047397   | 0.047397   | 0.047397   |   0.0 |  0.19
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 0.2122     |            |       |  0.87
+
+Nlocal:           8000 ave        8000 max        8000 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:           5333 ave        5333 max        5333 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:              0 ave           0 max           0 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+FullNghs:       202650 ave      202650 max      202650 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 202650
+Ave neighs/atom = 25.33125
+Neighbor list builds = 7
+Dangerous builds = 0
+write_dump       all custom md/data/si_cd/dump_1.44_relaxed.gz id type x y z
+#------------------------------------------------------------------------------#
+Total wall time: 0:20:47

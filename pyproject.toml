@@ -41,6 +41,10 @@ ignore_missing_imports = true
 module = "scipy.spatial.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "e3nn.*"
+ignore_missing_imports = true
+
 [project.urls]
 repository = "https://github.com/DC3-Freitas/egnn-crystal-classifier"
 
